@@ -1793,7 +1793,7 @@ dependencies = [
  "futures",
  "hex",
  "js-sys",
- "jsonrpsee-core 0.14.0",
+ "jsonrpsee-core 0.15.1",
  "jsonrpsee-types 0.14.0",
  "jsonrpsee-wasm-client",
  "jsonrpsee-ws-client",
