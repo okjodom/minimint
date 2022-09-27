@@ -10,7 +10,11 @@ license = "MIT"
 name = "fedimint-tests"
 path = "tests/tests.rs"
 
-[dev-dependencies]
+[[bin]]
+name = "socktests"
+path = "tests/socktests.rs"
+
+[dependencies]
 assert_matches = "1.5.0"
 async-trait = "0.1.42"
 bitcoin = "0.28.1"

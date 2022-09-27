@@ -420,6 +420,25 @@ impl FederationTest {
         }
     }
 
+    pub async fn open_sock_connection_on_peers(&self, count: u64) {
+        println!("Server count: {}", &self.servers.len());
+
+        for server in &self.servers {
+            println!("");
+            for t in 0..count {
+                async move {
+                    match server.borrow_mut().fedimint.api.fetch_gateways().await {
+                        Ok(gateways) => {
+                            println!("Thread {} : Gateways count: {}", t, gateways.len())
+                        }
+                        Err(e) => println!("Thread {} : Error: {}", t, e),
+                    }
+                }
+                .await;
+            }
+        }
+    }
+
     /// Returns a fixture that only calls on a subset of the peers.  Note that PeerIds are always
     /// starting at 0 in tests.
     pub fn subset_peers(&self, peers: &[u16]) -> Self {
