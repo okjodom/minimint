@@ -1,9 +1,9 @@
 [package]
-name = "mint-client-cli"
+name = "fedimint-cli"
 version = "0.1.0"
 authors = ["The Fedimint Developers"]
 edition = "2021"
-description = "mint-client-cli is a command line interface wrapper for the client library."
+description = "fedimint-cli is a command line interface wrapper for the client library."
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -12,21 +12,21 @@ name = "mint-rpc-client"
 path = "src/bin/mint-rpc-client.rs"
 
 [[bin]]
-name = "mint-client-cli"
+name = "fedimint-cli"
 path = "src/main.rs"
 
 [dependencies]
 bitcoin = "0.28.1"
 bitcoin_hashes = "0.10.0"
-clap = { version = "4.0.0", features = ["derive"] }
+clap = { version = "4.0.9", features = ["derive"] }
 lightning-invoice = "0.18.0"
 mint-client = { path = "../client-lib" }
 fedimint-api = { path = "../../fedimint-api" }
 fedimint-core = { path = "../../fedimint-core" }
 fedimint-rocksdb = { path = "../../fedimint-rocksdb" }
-rand = "0.6.5"
+rand = "0.8.5"
 serde = { version = "1.0.145", features = [ "derive" ] }
-tokio = { version = "1.21.1", features = ["full"] }
+tokio = { version = "1.21.2", features = ["full"] }
 tracing ="0.1.22"
 tracing-subscriber = { version = "0.3.1", features = [ "env-filter" ] }
 serde_json = "1.0.85"
