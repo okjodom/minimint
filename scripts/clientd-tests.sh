@@ -7,10 +7,11 @@ export RUST_LOG=info
 source ./scripts/setup-tests.sh
 ./scripts/start-fed.sh
 
-#start clientd
+#start two test clientd instances sharing a client
 $FM_CLIENTD $FM_CFG_DIR &
 echo $! >> $FM_PID_FILE
-await_server_on_port 8081
+await_server_on_port 8081 # first test clientd
+await_server_on_port 8082 # second test clientd
 
 #### BEGIN TESTS ####
 [[ $($FM_CLIENTD_CLI info | jq -r 'has("data")') = true ]]

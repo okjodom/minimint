@@ -139,14 +139,14 @@ pub struct PendingTransaction {
     value: Amount,
 }
 
-pub async fn call<P>(params: &P, enpoint: &str) -> Result<serde_json::Value>
+pub async fn call<P>(url: String, endpoint: String, params: &P) -> Result<serde_json::Value>
 where
     P: Serialize + ?Sized,
 {
     let client = reqwest::Client::new();
 
     let response = client
-        .post(format!("http://127.0.0.1:8081{}", enpoint))
+        .post(format!("{}{}", url, endpoint))
         .json(params)
         .send()
         .await?;
@@ -230,7 +230,6 @@ struct State {
 }
 
 pub async fn run_clientd(client: Arc<Client<UserClientConfig>>, port: u16) -> Result<()> {
-    // make this a lib >>>>
     let (tx, mut rx) = mpsc::channel(1024);
     let rng = OsRng;
 

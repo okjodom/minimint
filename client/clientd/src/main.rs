@@ -37,7 +37,14 @@ async fn main() {
 
     let client = Arc::new(Client::new(cfg.clone(), db, Default::default()));
 
-    match clientd::run_clientd(client, 8081).await {
+    match clientd::run_clientd(client.clone(), 8081).await {
+        Ok(_) => {}
+        Err(e) => {
+            tracing::error!("Error running clientd: {}", e);
+        }
+    };
+
+    match clientd::run_clientd(client.clone(), 8082).await {
         Ok(_) => {}
         Err(e) => {
             tracing::error!("Error running clientd: {}", e);

@@ -9,6 +9,9 @@ use mint_client::utils::{from_hex, parse_fedimint_amount};
 #[derive(Parser)]
 #[command(author, version, about = "a json-rpc cli application")]
 struct Cli {
+    /// The address of the clientd server
+    #[clap(short, long, default_value = "http://localhost:8081")]
+    url: String,
     /// print unformatted json
     #[arg(long = "raw", short = 'r')]
     raw_json: bool,
@@ -56,17 +59,29 @@ async fn main() {
             println!("{}", env!("GIT_HASH"));
         }
         Commands::Info => {
-            print_response(call("", "/get_info").await, args.raw_json);
+            print_response(
+                call(args.url, String::from("/get_info"), "").await,
+                args.raw_json,
+            );
         }
         Commands::Pending => {
-            print_response(call("", "/get_pending").await, args.raw_json);
+            print_response(
+                call(args.url, String::from("/get_pending"), "").await,
+                args.raw_json,
+            );
         }
         Commands::NewPegInAddress => {
-            print_response(call("", "/get_new_peg_in_address").await, args.raw_json);
+            print_response(
+                call(args.url, String::from("/get_new_peg_in_address"), "").await,
+                args.raw_json,
+            );
         }
         Commands::WaitBlockHeight { height } => {
             let params = WaitBlockHeightPayload { height };
-            print_response(call(&params, "/wait_block_height").await, args.raw_json);
+            print_response(
+                call(args.url, String::from("/wait_block_height"), &params).await,
+                args.raw_json,
+            );
         }
         Commands::PegIn {
             txout_proof,
@@ -76,11 +91,17 @@ async fn main() {
                 txout_proof,
                 transaction,
             };
-            print_response(call(&params, "/peg_in").await, args.raw_json);
+            print_response(
+                call(args.url, String::from("/peg_in"), &params).await,
+                args.raw_json,
+            );
         }
         Commands::Spend { amount } => {
             let params = SpendPayload { amount };
-            print_response(call(&params, "/spend").await, args.raw_json);
+            print_response(
+                call(args.url, String::from("/spend"), &params).await,
+                args.raw_json,
+            );
         }
     }
 }
