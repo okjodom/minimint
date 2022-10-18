@@ -1,4 +1,3 @@
-use anyhow::Result;
 use bitcoin::Transaction;
 use clap::{Parser, Subcommand};
 use clientd::{call, PegInPayload, SpendPayload, WaitBlockHeightPayload};
@@ -59,29 +58,17 @@ async fn main() {
             println!("{}", env!("GIT_HASH"));
         }
         Commands::Info => {
-            print_response(
-                call(args.url, String::from("/get_info"), "").await,
-                args.raw_json,
-            );
+            call(args.url, String::from("/get_info"), "").await;
         }
         Commands::Pending => {
-            print_response(
-                call(args.url, String::from("/get_pending"), "").await,
-                args.raw_json,
-            );
+            call(args.url, String::from("/get_pending"), "").await;
         }
         Commands::NewPegInAddress => {
-            print_response(
-                call(args.url, String::from("/get_new_peg_in_address"), "").await,
-                args.raw_json,
-            );
+            call(args.url, String::from("/get_new_peg_in_address"), "").await;
         }
         Commands::WaitBlockHeight { height } => {
             let params = WaitBlockHeightPayload { height };
-            print_response(
-                call(args.url, String::from("/wait_block_height"), &params).await,
-                args.raw_json,
-            );
+            call(args.url, String::from("/wait_block_height"), &params).await;
         }
         Commands::PegIn {
             txout_proof,
@@ -91,30 +78,11 @@ async fn main() {
                 txout_proof,
                 transaction,
             };
-            print_response(
-                call(args.url, String::from("/peg_in"), &params).await,
-                args.raw_json,
-            );
+            call(args.url, String::from("/peg_in"), &params).await;
         }
         Commands::Spend { amount } => {
             let params = SpendPayload { amount };
-            print_response(
-                call(args.url, String::from("/spend"), &params).await,
-                args.raw_json,
-            );
+            call(args.url, String::from("/spend"), &params).await;
         }
-    }
-}
-
-fn print_response(response: Result<serde_json::Value>, raw: bool) {
-    match response {
-        Ok(json) => {
-            if raw {
-                serde_json::to_writer(std::io::stdout(), &json).unwrap();
-            } else {
-                serde_json::to_writer_pretty(std::io::stdout(), &json).unwrap();
-            }
-        }
-        Err(err) => eprintln!("{}", err),
     }
 }

@@ -139,7 +139,7 @@ pub struct PendingTransaction {
     value: Amount,
 }
 
-pub async fn call<P>(url: String, endpoint: String, params: &P) -> Result<serde_json::Value>
+pub async fn call<P>(url: String, endpoint: String, params: &P)
 where
     P: Serialize + ?Sized,
 {
@@ -149,8 +149,14 @@ where
         .post(format!("{}{}", url, endpoint))
         .json(params)
         .send()
-        .await?;
-    Ok(response.json().await?)
+        .await
+        .expect("Failed to send request");
+
+    println!("status: {}", response.status());
+    let txt = &response.text().await.unwrap();
+    let val: serde_json::Value = serde_json::from_str(txt).expect("failed to parse response");
+    let formatted = serde_json::to_string_pretty(&val).expect("failed to format response");
+    println!("{}", formatted);
 }
 
 // We need our own `Json` extractor that customizes the error from `axum::Json`
