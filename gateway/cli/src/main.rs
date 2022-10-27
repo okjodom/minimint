@@ -80,7 +80,7 @@ async fn main() {
                     password: source_password(cli.rpcpassword),
                     // TODO: Remove this field once we have fixed Issue 664:
                     // hardcoded a federation id for now
-                    default_federation: FederationId("Hal's trusty mint".into()),
+                    default_federation: FederationId("Hals_trusty_mint".into()),
                 },
             )
             .expect("Failed to write gateway configs to file");
