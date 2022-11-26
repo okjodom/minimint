@@ -2182,6 +2182,7 @@ dependencies = [
  "fedimint-build",
  "fedimint-rocksdb",
  "fedimint-server",
+ "fedimint-sled",
  "futures",
  "hex",
  "lightning-invoice",

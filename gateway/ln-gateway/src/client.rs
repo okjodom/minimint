@@ -57,6 +57,20 @@ impl IDbFactory for RocksDbFactory {
     }
 }
 
+/// A factory that creates Sled databases instances
+#[derive(Default, Debug, Clone)]
+pub struct SledDbFactory {}
+
+impl IDbFactory for SledDbFactory {
+    fn create_database(&self, federation_id: FederationId, path: PathBuf) -> Result<Database> {
+        let db_path = path.join(format!("{}.db", federation_id.hash()));
+        let db = fedimint_sled::SledDb::open(db_path, "gateway")
+            .expect("Error opening new sled DB")
+            .into();
+        Ok(db)
+    }
+}
+
 /// Trait for gateway federation client builders
 #[async_trait]
 pub trait IGatewayClientBuilder: Debug {
