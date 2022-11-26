@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use async_trait::async_trait;
 use fedimint_api::{
     db::{mem_impl::MemDatabase, Database},
     dyn_newtype_define,
@@ -54,9 +55,6 @@ pub trait IGatewayClientBuilder: Debug {
     /// Build a new gateway federation client
     fn build(&self, config: GatewayClientConfig) -> Result<Client<GatewayClientConfig>>;
 
-    /// Create a new database for the gateway federation client
-    fn create_database(&self, federation_id: FederationId) -> Result<Database>;
-
     /// Save and persist the configuration of the gateway federation client
     fn save_config(&self, config: GatewayClientConfig) -> Result<()>;
 
@@ -64,43 +62,38 @@ pub trait IGatewayClientBuilder: Debug {
 }
 
 dyn_newtype_define! {
-  /// Arc reference to a Gateway federation client builder
-  #[derive(Clone)]
-  pub GatewayClientBuilder(Arc<IGatewayClientBuilder>)
+    /// dyn newtype for a Gateway federation client builder
+    #[derive(Clone)]
+    pub GatewayClientBuilder(Arc<IGatewayClientBuilder>)
 }
 
 #[derive(Debug, Clone)]
-pub struct RocksDbGatewayClientBuilder {
-    pub work_dir: PathBuf,
+pub struct StandardGatewayClientBuilder {
+    work_dir: PathBuf,
+    db_factory: DbFactory,
 }
 
-/// Default gateway clinet builder which constructs clients with RocksDb
-/// and saves the config at the given work directory
-impl RocksDbGatewayClientBuilder {
-    pub fn new(work_dir: PathBuf) -> Self {
-        Self { work_dir }
+impl StandardGatewayClientBuilder {
+    pub fn new(work_dir: PathBuf, db_factory: DbFactory) -> Self {
+        Self {
+            work_dir,
+            db_factory,
+        }
     }
 }
 
-/// Builds a new federation client with RocksDb
-/// On successful build, the configuration is saved to a file at the builder work directory
-impl IGatewayClientBuilder for RocksDbGatewayClientBuilder {
+#[async_trait]
+impl IGatewayClientBuilder for StandardGatewayClientBuilder {
+    /// Build a new gateway federation client
     fn build(&self, config: GatewayClientConfig) -> Result<Client<GatewayClientConfig>> {
         let federation_id = FederationId(config.client_config.federation_name.clone());
 
-        let db = self.create_database(federation_id)?;
+        let db = self
+            .db_factory
+            .create_database(federation_id, self.work_dir.clone())?;
         let ctx = secp256k1::Secp256k1::new();
 
         Ok(Client::new(config, db, ctx))
-    }
-
-    /// Create a client database
-    fn create_database(&self, federation_id: FederationId) -> Result<Database> {
-        let db_path = self.work_dir.join(format!("{}.db", federation_id.hash()));
-        let db = fedimint_rocksdb::RocksDb::open(db_path)
-            .expect("Error opening DB")
-            .into();
-        Ok(db)
     }
 
     /// Persist federation client cfg to [`<federation_id>.json`] file
@@ -122,6 +115,7 @@ impl IGatewayClientBuilder for RocksDbGatewayClientBuilder {
         Ok(())
     }
 
+    /// Load all gateway client configs from the work directory
     fn load_configs(&self) -> Result<Vec<GatewayClientConfig>> {
         Ok(std::fs::read_dir(&self.work_dir)
             .map_err(|e| LnGatewayError::Other(anyhow::Error::new(e)))?
@@ -151,34 +145,5 @@ impl IGatewayClientBuilder for RocksDbGatewayClientBuilder {
                     .ok()
             })
             .collect())
-    }
-}
-
-// Builds a new federation client with MemoryDb
-#[derive(Default, Debug, Clone)]
-pub struct MemoryDbGatewayClientBuilder {}
-
-impl IGatewayClientBuilder for MemoryDbGatewayClientBuilder {
-    fn build(&self, config: GatewayClientConfig) -> Result<Client<GatewayClientConfig>> {
-        let federation_id = FederationId(config.client_config.federation_name.clone());
-
-        let db = self.create_database(federation_id)?;
-        let ctx = secp256k1::Secp256k1::new();
-
-        Ok(Client::new(config, db, ctx))
-    }
-
-    /// Create a client database
-    fn create_database(&self, _federation_id: FederationId) -> Result<Database> {
-        Ok(MemDatabase::new().into())
-    }
-
-    /// Persist gateway federation client cfg
-    fn save_config(&self, _config: GatewayClientConfig) -> Result<()> {
-        unimplemented!()
-    }
-
-    fn load_configs(&self) -> Result<Vec<GatewayClientConfig>> {
-        Ok(vec![])
     }
 }
