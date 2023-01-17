@@ -36,6 +36,8 @@ windows:
           - lightningd --dev-fast-gossip --dev-bitcoind-poll=1 --network regtest --bitcoin-rpcuser=bitcoin --bitcoin-rpcpassword=bitcoin --lightning-dir=$FM_LN2_DIR --addr=127.0.0.1:9001 &
           - echo $! >> $FM_PID_FILE
           - fg
+        - gateway:
+          - source scripts/start-gw.sh
         - federation:
           - sleep 1 # wait for bitcoind
           - ./scripts/start-fed.sh
