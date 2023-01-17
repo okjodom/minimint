@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use fedimint_api::{
@@ -9,25 +9,34 @@ use fedimint_api::{
     module::registry::ModuleDecoderRegistry,
     task::TaskGroup,
 };
-use fedimint_server::{
-    config::load_from_file,
-    modules::{
-        ln::common::LightningDecoder, mint::common::MintDecoder, wallet::common::WalletDecoder,
-    },
+use fedimint_server::modules::{
+    ln::common::LightningDecoder, mint::common::MintDecoder, wallet::common::WalletDecoder,
 };
 use ln_gateway::{
     client::{DynGatewayClientBuilder, RocksDbFactory, StandardGatewayClientBuilder},
-    config::GatewayConfig,
     gateway::Gateway,
     rpc::lnrpc_client::{DynLnRpcClientFactory, NetworkLnRpcClientFactory},
 };
 use tracing::{error, info};
+use url::Url;
 
 #[derive(Parser)]
 pub struct GatewayOpts {
     /// Path to folder containing gateway config and data files
-    #[arg(long = "cfg-dir", env = "GW_CONFIG_DIR")]
-    pub cfg_dir: PathBuf,
+    #[arg(long = "data-dir", env = "FM_GATEWAY_DATA_DIR")]
+    pub data_dir: PathBuf,
+
+    /// Gateway webserver bind address
+    #[arg(long = "bind-addr", env = "FM_GATEWAY_BIND_ADDR")]
+    pub bind_address: SocketAddr,
+
+    /// Public URL from which the webserver API is reachable
+    #[arg(long = "announce-addr", env = "FM_GATEWAY_ANNOUNCE_ADDR")]
+    pub announce_address: Url,
+
+    /// webserver authentication password
+    #[arg(long = "password", env = "FM_GATEWAY_PASSWORD")]
+    pub password: String,
 }
 
 /// Fedimint Gateway Binary
@@ -46,24 +55,23 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     // Read configurations
-    let GatewayOpts { cfg_dir } = GatewayOpts::parse();
-    let gw_cfg_path = cfg_dir.join("gateway.config");
-    let config: GatewayConfig = match load_from_file(&gw_cfg_path) {
-        Ok(cfg) => {
-            info!("Loaded gateway config from {}", gw_cfg_path.display());
-            cfg
-        }
-        Err(e) => {
-            error!("Failed to load gateway config: {}", e);
-            return Err(e);
-        }
-    };
+    let GatewayOpts {
+        data_dir,
+        bind_address,
+        announce_address,
+        password,
+    } = GatewayOpts::parse();
+
+    info!(
+        "Starting gateway with these configs \n data dir: {:?}, bind addr: {}, announce addr {}",
+        data_dir, bind_address, announce_address
+    );
 
     // Create federation client builder
     let client_builder: DynGatewayClientBuilder = StandardGatewayClientBuilder::new(
-        cfg_dir.clone(),
+        data_dir.clone(),
         RocksDbFactory.into(),
-        config.announce_address.clone(),
+        announce_address,
     )
     .into();
 
@@ -81,16 +89,9 @@ async fn main() -> Result<(), anyhow::Error> {
     ]);
 
     // Create gateway instance
-    let gateway = Gateway::new(
-        config,
-        decoders,
-        lnrpc_factory,
-        client_builder,
-        task_group.clone(),
-    )
-    .await;
+    let gateway = Gateway::new(decoders, lnrpc_factory, client_builder, task_group.clone()).await;
 
-    if let Err(e) = gateway.run().await {
+    if let Err(e) = gateway.run(bind_address, password).await {
         task_group.shutdown_join_all().await?;
 
         error!("Gateway stopped with error: {}", e);

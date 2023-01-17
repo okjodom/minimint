@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -17,12 +18,11 @@ use fedimint_server::modules::ln::contracts::Preimage;
 use mint_client::{api::WsFederationConnect, ln::PayInvoicePayload, GatewayClient};
 use secp256k1::PublicKey;
 use tokio::sync::{mpsc, Mutex};
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 use crate::{
     actor_fork::GatewayActor,
     client::DynGatewayClientBuilder,
-    config::GatewayConfig,
     gatewaylnrpc::GetPubKeyResponse,
     rpc::{
         lnrpc_client::{DynLnRpcClient, DynLnRpcClientFactory},
@@ -34,7 +34,6 @@ use crate::{
 };
 
 pub struct Gateway {
-    config: GatewayConfig,
     decoders: ModuleDecoderRegistry,
     actors: Mutex<HashMap<String, Arc<GatewayActor>>>,
     lnrpc: Mutex<Option<DynLnRpcClient>>,
@@ -50,7 +49,6 @@ pub struct Gateway {
 
 impl Gateway {
     pub async fn new(
-        config: GatewayConfig,
         decoders: ModuleDecoderRegistry,
         lnrpc_factory: DynLnRpcClientFactory,
         client_builder: DynGatewayClientBuilder,
@@ -65,7 +63,6 @@ impl Gateway {
         let decoders2 = decoders.clone();
 
         let gw = Self {
-            config: config.clone(),
             actors: Mutex::new(HashMap::new()),
             lnrpc: Mutex::new(lnrpc),
             sender,
@@ -269,17 +266,12 @@ impl Gateway {
             .await
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(mut self, bind_address: SocketAddr, password: String) -> Result<()> {
         let mut tg = self.task_group.clone();
 
-        let cfg = self.config.clone();
         let sender = GatewayRpcSender::new(self.sender.clone());
         tg.spawn("Gateway Webserver", move |server_ctrl| async move {
-            let mut webserver = tokio::spawn(run_webserver(
-                cfg.password.clone(),
-                cfg.bind_address,
-                sender,
-            ));
+            let mut webserver = tokio::spawn(run_webserver(password, bind_address, sender));
 
             // Shut down webserver if requested
             if server_ctrl.is_shutting_down() {
