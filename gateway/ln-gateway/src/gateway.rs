@@ -196,20 +196,10 @@ impl Gateway {
 
     /// Handles an intercepted HTLC that might be an incoming payment we are receiving on behalf of
     /// a federation user.
-    async fn handle_receive_payment(&self, payload: ReceivePaymentPayload) -> Result<Preimage> {
-        let ReceivePaymentPayload { htlc_accepted } = payload;
-
-        let invoice_amount = htlc_accepted.htlc.amount;
-        let payment_hash = htlc_accepted.htlc.payment_hash;
-        debug!("Incoming htlc for payment hash {}", payment_hash);
-
-        // FIXME: Issue 664: We should avoid having a special reference to a federation
-        // all requests, including `ReceivePaymentPayload`, should contain the federation id
-        // TODO: Parse federation id from routing hint in htlc_accepted message
-        self.select_actor(self.config.default_federation.clone())
-            .await?
-            .buy_preimage_internal(&payment_hash, &invoice_amount)
-            .await
+    async fn handle_receive_payment(&self, _payload: ReceivePaymentPayload) -> Result<Preimage> {
+        Err(LnGatewayError::Other(anyhow!(
+            "Not implemented: handle_receive_payment"
+        )))
     }
 
     async fn handle_pay_invoice_msg(&self, payload: PayInvoicePayload) -> Result<()> {
