@@ -86,7 +86,6 @@ pub trait IGatewayClientBuilder: Debug {
         connect: WsFederationConnect,
         mint_channel_id: u64,
         node_pubkey: PublicKey,
-        announce_address: Url,
     ) -> Result<GatewayClientConfig>;
 
     /// Save and persist the configuration of the gateway federation client
@@ -106,13 +105,15 @@ dyn_newtype_define! {
 pub struct StandardGatewayClientBuilder {
     work_dir: PathBuf,
     db_factory: DynDbFactory,
+    gateway_api: Url,
 }
 
 impl StandardGatewayClientBuilder {
-    pub fn new(work_dir: PathBuf, db_factory: DynDbFactory) -> Self {
+    pub fn new(work_dir: PathBuf, db_factory: DynDbFactory, gateway_api: Url) -> Self {
         Self {
             work_dir,
             db_factory,
+            gateway_api,
         }
     }
 }
@@ -141,7 +142,6 @@ impl IGatewayClientBuilder for StandardGatewayClientBuilder {
         connect: WsFederationConnect,
         mint_channel_id: u64,
         node_pubkey: PublicKey,
-        announce_address: Url,
     ) -> Result<GatewayClientConfig> {
         let api: DynFederationApi = WsFederationApi::new(connect.members).into();
 
@@ -160,7 +160,7 @@ impl IGatewayClientBuilder for StandardGatewayClientBuilder {
             redeem_key: kp_fed,
             timelock_delta: 10,
             node_pub_key: node_pubkey,
-            api: announce_address,
+            api: self.gateway_api.clone(),
         })
     }
 

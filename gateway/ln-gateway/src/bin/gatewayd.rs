@@ -60,8 +60,12 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     // Create federation client builder
-    let client_builder: DynGatewayClientBuilder =
-        StandardGatewayClientBuilder::new(cfg_dir.clone(), RocksDbFactory.into()).into();
+    let client_builder: DynGatewayClientBuilder = StandardGatewayClientBuilder::new(
+        cfg_dir.clone(),
+        RocksDbFactory.into(),
+        config.announce_address.clone(),
+    )
+    .into();
 
     // Create task group for controlled shutdown of the gateway
     let task_group = TaskGroup::new();

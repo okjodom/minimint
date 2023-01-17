@@ -168,12 +168,7 @@ impl LnGateway {
 
         let gw_client_cfg = self
             .client_builder
-            .create_config(
-                connect,
-                channel_id,
-                node_pub_key,
-                self.config.announce_address.clone(),
-            )
+            .create_config(connect, channel_id, node_pub_key)
             .await
             .expect("Failed to create gateway client config");
 
