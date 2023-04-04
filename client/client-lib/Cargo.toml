@@ -65,7 +65,7 @@ tempfile = "3.4.0"
 test-log = { version = "0.2", features = [ "trace" ], default-features = false }
 tracing-subscriber = { version = "0.3.16", features = [ "env-filter" ] }
 fedimint-testing = { path = "../../fedimint-testing" }
-once_cell = "1.16.0"
+once_cell = "1.17.1"
 fedimint-mint-server = { path = "../../modules/fedimint-mint-server" }
 fedimint-ln-server = { path = "../../modules/fedimint-ln-server" }
 fedimint-wallet-server = { path = "../../modules/fedimint-wallet-server" }
