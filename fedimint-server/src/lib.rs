@@ -1,19 +1,18 @@
 #![allow(where_clauses_object_safety)] // https://github.com/dtolnay/async-trait/issues/228
 extern crate fedimint_core;
 
-use std::fs;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{anyhow as format_err, Context};
+use anyhow::Context;
 use async_trait::async_trait;
 use config::ServerConfig;
 use fedimint_core::core::ModuleInstanceId;
 use fedimint_core::db::Database;
 use fedimint_core::epoch::ConsensusItem;
-use fedimint_core::module::{ApiAuth, ApiEndpoint, ApiEndpointContext, ApiError, ApiRequestErased};
+use fedimint_core::module::{ApiEndpoint, ApiEndpointContext, ApiError, ApiRequestErased};
 use fedimint_core::task::TaskGroup;
 pub use fedimint_core::*;
 use fedimint_core::{NumPeers, PeerId};
@@ -28,7 +27,6 @@ use tokio::runtime::Runtime;
 use tracing::{error, info};
 
 use crate::config::api::{ConfigGenApi, ConfigGenSettings};
-use crate::config::io::PLAINTEXT_PASSWORD;
 use crate::consensus::server::ConsensusServer;
 use crate::consensus::HbbftConsensusOutcome;
 use crate::net::api::RpcHandlerCtx;
@@ -121,19 +119,20 @@ impl FedimintServer {
         );
 
         // Attempt get the config with local password, otherwise start config gen
-        if let Ok(password) = fs::read_to_string(self.data_dir.join(PLAINTEXT_PASSWORD)) {
-            config_gen
-                .set_password(ApiAuth(password.clone()))
-                .map_err(|_| format_err!("Unable to use local password"))?;
-            info!(target: LOG_CONSENSUS, "Setting password from local file");
+        // if let Ok(password) =
+        // fs::read_to_string(self.data_dir.join(PLAINTEXT_PASSWORD)) {
+        //     config_gen
+        //         .set_password(ApiAuth(password.clone()))
+        //         .map_err(|_| format_err!("Unable to use local password"))?;
+        //     info!(target: LOG_CONSENSUS, "Setting password from local file");
 
-            if config_gen.has_upgrade_flag().await {
-                info!(target: LOG_CONSENSUS, "Restarted from an upgrade");
-            } else if config_gen.start_consensus(ApiAuth(password)).await.is_ok() {
-                info!(target: LOG_CONSENSUS, "Configs found locally");
-                return Ok(config_generated_rx.recv().await.expect("should not close"));
-            }
-        }
+        //     if config_gen.has_upgrade_flag().await {
+        //         info!(target: LOG_CONSENSUS, "Restarted from an upgrade");
+        //     } else if config_gen.start_consensus(ApiAuth(password)).await.is_ok() {
+        //         info!(target: LOG_CONSENSUS, "Configs found locally");
+        //         return Ok(config_generated_rx.recv().await.expect("should not
+        // close"));     }
+        // }
 
         let mut rpc_module = RpcHandlerCtx::new_module(config_gen);
         Self::attach_endpoints(&mut rpc_module, config::api::server_endpoints(), None);

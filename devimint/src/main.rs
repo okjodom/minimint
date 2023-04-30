@@ -8,13 +8,12 @@ use bitcoincore_rpc::bitcoin::Amount as BitcoinRpcAmount;
 use bitcoincore_rpc::RpcApi;
 use clap::{Parser, Subcommand};
 use cln_rpc::primitives::{Amount as ClnRpcAmount, AmountOrAny};
-use devimint::federation::{fedimint_env, Fedimintd};
+use devimint::federation::Fedimintd;
 use devimint::util::{poll, ProcessManager};
 use devimint::{cmd, dev_fed, external_daemons, Bitcoind, DevFed};
 use fedimint_core::task::TaskGroup;
 use fedimint_logging::LOG_TEST;
 use tokio::fs;
-use tokio::net::TcpStream;
 use tracing::info;
 
 pub async fn latency_tests(dev_fed: DevFed) -> Result<()> {
@@ -666,14 +665,14 @@ async fn run_ui(process_mgr: &ProcessManager, task_group: &TaskGroup) -> Result<
     for id in 0..2 {
         fedimints.push(Fedimintd::new(process_mgr, bitcoind.clone(), id).await?);
     }
-    for id in 0..2 {
-        let ui_addr = &fedimint_env(id)?["FM_LISTEN_UI"];
-        poll("waiting for ui startup", || async {
-            Ok(TcpStream::connect(ui_addr).await.is_ok())
-        })
-        .await?;
-        info!(LOG_TEST, "Started UI on http://{ui_addr}");
-    }
+    // for id in 0..2 {
+    //     let ui_addr = &fedimint_env(id)?["FM_LISTEN_UI"];
+    //     poll("waiting for ui startup", || async {
+    //         Ok(TcpStream::connect(ui_addr).await.is_ok())
+    //     })
+    //     .await?;
+    //     info!(LOG_TEST, "Started UI on http://{ui_addr}");
+    // }
     task_group.make_handle().make_shutdown_rx().await.await?;
     Ok(())
 }
