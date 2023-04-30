@@ -664,14 +664,14 @@ async fn run_ui(process_mgr: &ProcessManager, task_group: &TaskGroup) -> Result<
     for id in 0..2 {
         fedimints.push(Fedimintd::new(process_mgr, bitcoind.clone(), id).await?);
     }
-    for id in 0..2 {
-        let ui_addr = &fedimint_env(id)?["FM_LISTEN_UI"];
-        poll("waiting for ui startup", || async {
-            Ok(TcpStream::connect(ui_addr).await.is_ok())
-        })
-        .await?;
-        info!("Started UI on http://{ui_addr}");
-    }
+    // for id in 0..2 {
+    //     let ui_addr = &fedimint_env(id)?["FM_LISTEN_UI"];
+    //     poll("waiting for ui startup", || async {
+    //         Ok(TcpStream::connect(ui_addr).await.is_ok())
+    //     })
+    //     .await?;
+    //     info!("Started UI on http://{ui_addr}");
+    // }
     task_group.make_handle().make_shutdown_rx().await.await?;
     Ok(())
 }

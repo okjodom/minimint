@@ -1,12 +1,18 @@
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
+use fedimint_core::admin_client::ConfigGenParamsRequest;
 use fedimint_core::config::{
     ModuleGenParams, ServerModuleGenParamsRegistry, ServerModuleGenRegistry,
+    META_FEDERATION_NAME_KEY,
 };
-use fedimint_core::core::ModuleKind;
+use fedimint_core::core::{
+    ModuleKind, LEGACY_HARDCODED_INSTANCE_ID_LN, LEGACY_HARDCODED_INSTANCE_ID_MINT,
+    LEGACY_HARDCODED_INSTANCE_ID_WALLET,
+};
 use fedimint_core::db::Database;
 use fedimint_core::module::ServerModuleGen;
 use fedimint_core::task::{sleep, TaskGroup};
@@ -25,6 +31,7 @@ use futures::FutureExt;
 use tokio::select;
 use tracing::{debug, error, info, warn};
 
+use crate::attach_default_module_gen_params;
 use crate::ui::{run_ui, UiMessage};
 
 /// Time we will wait before forcefully shutting down tasks
@@ -207,73 +214,112 @@ async fn run(
     module_gens: ServerModuleGenRegistry,
     module_gens_params: ServerModuleGenParamsRegistry,
 ) -> anyhow::Result<()> {
-    let (ui_sender, mut ui_receiver) = tokio::sync::mpsc::channel(1);
+    // let (ui_sender, mut ui_receiver) = tokio::sync::mpsc::channel(1);
 
     info!("Starting pre-check");
 
     // Run admin UI if a socket address was given for it
-    if let Some(listen_ui) = opts.listen_ui {
-        let module_gens = module_gens.clone();
-        // Spawn admin UI
-        let data_dir = opts.data_dir.clone();
-        let ui_task_group = task_group.make_subgroup().await;
-        let password = opts.password.clone();
-        task_group
-            .spawn("admin-ui", move |_| async move {
-                run_ui(
-                    data_dir,
-                    ui_sender,
-                    listen_ui,
-                    password,
-                    ui_task_group,
-                    module_gens,
-                    module_gens_params,
-                )
-                .await;
-            })
-            .await;
+    // if let Some(listen_ui) = opts.listen_ui {
+    //     let module_gens = module_gens.clone();
+    //     // Spawn admin UI
+    //     let data_dir = opts.data_dir.clone();
+    //     let ui_task_group = task_group.make_subgroup().await;
+    //     let password = opts.password.clone();
+    //     let module_gens_params_clone = module_gens_params.clone();
+    //     task_group
+    //         .spawn("admin-ui", move |_| async move {
+    //             run_ui(
+    //                 data_dir,
+    //                 ui_sender,
+    //                 listen_ui,
+    //                 password,
+    //                 ui_task_group,
+    //                 module_gens,
+    //                 module_gens_params_clone,
+    //             )
+    //             .await;
+    //         })
+    //         .await;
 
-        // If federation configs (e.g. local.json) missing, wait for admin UI to report
-        // DKG completion
-        let local_cfg_path = opts.data_dir.join(LOCAL_CONFIG).with_extension(JSON_EXT);
-        if !std::path::Path::new(&local_cfg_path).exists() {
-            loop {
-                if let UiMessage::DkgSuccess = ui_receiver
-                    .recv()
-                    .await
-                    .expect("failed to receive setup message")
-                {
-                    break;
-                }
-            }
-        }
-    }
+    //     // If federation configs (e.g. local.json) missing, wait for admin UI to
+    // report     // DKG completion
+    //     let local_cfg_path =
+    // opts.data_dir.join(LOCAL_CONFIG).with_extension(JSON_EXT);
+    //     if !std::path::Path::new(&local_cfg_path).exists() {
+    //         loop {
+    //             if let UiMessage::DkgSuccess = ui_receiver
+    //                 .recv()
+    //                 .await
+    //                 .expect("failed to receive setup message")
+    //             {
+    //                 break;
+    //             }
+    //         }
+    //     }
+    // }
 
-    info!("Starting consensus");
+    // info!("Starting consensus");
 
-    let cfg = read_server_config(&opts.password, opts.data_dir.clone())?;
-    let decoders = module_gens.decoders(cfg.iter_module_instances())?;
+    // let cfg = read_server_config(&opts.password, opts.data_dir.clone())?;
+    // let mods = module_gens.legacy_init_order_iter()
+    //     .map(|(_k, v)|  v.to_dyn_common())
+    //     .collect();
+    let ln_kind = ModuleKind::from_static_str("ln");
+    let mint_kind = ModuleKind::from_static_str("mint");
+    let wallet_kind = ModuleKind::from_static_str("wallet");
+    let module_kinds = vec![
+        (LEGACY_HARDCODED_INSTANCE_ID_MINT, &mint_kind),
+        (LEGACY_HARDCODED_INSTANCE_ID_LN, &ln_kind),
+        (LEGACY_HARDCODED_INSTANCE_ID_WALLET, &wallet_kind),
+    ];
+    let decoders = module_gens.decoders(module_kinds.into_iter())?;
     let db = Database::new(
         fedimint_rocksdb::RocksDb::open(opts.data_dir.join(DB_FILE))?,
         decoders.clone(),
+    );
+
+    let bind_p2p = std::env::var("FM_BIND_P2P").unwrap().parse().unwrap();
+    let p2p_url = std::env::var("FM_P2P_URL").unwrap().parse().unwrap();
+    let bind_api = std::env::var("FM_BIND_API").unwrap().parse().unwrap();
+    let api_url = std::env::var("FM_API_URL").unwrap().parse().unwrap();
+
+    info!("module_gens {:?}", module_gens);
+    info!("module_gens_params {:?}", &module_gens_params);
+    // TODO: read these defaults from the environment
+    let max_denomination = fedimint_core::Amount::from_msats(100000000000);
+    let network = bitcoin::Network::Regtest;
+    let finality_delay = 11;
+    let mut module_gens_params_mut = module_gens_params.clone();
+    attach_default_module_gen_params(
+        &mut module_gens_params_mut,
+        max_denomination,
+        network,
+        finality_delay,
     );
 
     // TODO: Fedimintd should use the config gen API
     // on each run we want to pass the currently passed passsword, so we need to
     // overwrite
     write_overwrite(opts.data_dir.join(PLAINTEXT_PASSWORD), opts.password)?;
+    let default_params = ConfigGenParamsRequest {
+        meta: BTreeMap::from([(META_FEDERATION_NAME_KEY.to_owned(), "foobar".to_string())]),
+        modules: module_gens_params_mut,
+    };
     let mut api = FedimintServer {
         data_dir: opts.data_dir,
         settings: ConfigGenSettings {
-            download_token_limit: cfg.local.download_token_limit,
-            p2p_bind: cfg.local.fed_bind,
-            api_bind: cfg.local.api_bind,
-            p2p_url: cfg.local.p2p_endpoints[&cfg.local.identity].url.clone(),
-            api_url: cfg.consensus.api_endpoints[&cfg.local.identity].url.clone(),
-            default_params: Default::default(),
+            download_token_limit: None,
+            p2p_bind: bind_p2p,
+            api_bind: bind_api,
+            p2p_url,
+            api_url,
+            default_params,
             module_gens: module_gens.legacy_init_modules(),
             max_connections: fedimint_server::config::max_connections(),
             registry: module_gens,
+            // default_params: Default::default(),
+            // module_gens: Default::default(),
+            // registry: Default::default(),
         },
         db,
     };
