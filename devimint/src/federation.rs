@@ -23,6 +23,10 @@ pub fn fedimint_env(peer_id: usize) -> anyhow::Result<HashMap<String, String>> {
     let base_port = 8173 + 10000;
     let p2p_port = base_port + (peer_id * 10);
     let api_port = base_port + (peer_id * 10) + 1;
+    info!(
+        target = "devimint",
+        "Federation {} is using FM_API_URL ws://127.0.0.1:{}", peer_id, api_port
+    );
     let ui_port = base_port + (peer_id * 10) + 2;
     let cfg_dir = env::var("FM_DATA_DIR")?;
     Ok(HashMap::from_iter([
