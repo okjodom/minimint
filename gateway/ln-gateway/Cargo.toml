@@ -20,6 +20,10 @@ path = "src/bin/gatewayd.rs"
 name = "gateway-cln-extension"
 path = "src/bin/cln_extension.rs"
 
+[[bin]]
+name = "gateway-zbd-extension"
+path = "src/bin/zbd_extension.rs"
+
 [[test]]
 name = "gateway-authentication-tests"
 path = "tests/authentication_tests.rs"
@@ -64,6 +68,7 @@ tonic_lnd = { git = "https://github.com/fedimint/tonic_lnd", branch="lnd-client-
 tower-http = { version = "0.3.5", features = ["cors", "auth"] }
 tracing = { version = "0.1.37", default-features = false, features= ["log", "attributes", "std"] }
 url = { version = "2.3.1", features = ["serde"] }
+zebedee-rust = "0.3.6"
 
 [dev-dependencies]
 fedimint-dummy-client = { path = "../../modules/fedimint-dummy-client" }
