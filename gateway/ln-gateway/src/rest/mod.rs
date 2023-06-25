@@ -1,5 +1,5 @@
-pub mod rpc_client;
-pub mod rpc_server;
+pub mod client;
+pub mod server;
 
 use std::borrow::Cow;
 use std::io::Cursor;

@@ -13,7 +13,7 @@ use super::{
     BackupPayload, BalancePayload, ConnectFedPayload, DepositAddressPayload, RestorePayload,
     WithdrawPayload,
 };
-use crate::rpc::{FederationInfo, GatewayInfo};
+use crate::rest::{FederationInfo, GatewayInfo};
 
 pub struct GatewayRpcClient {
     // Base URL to gateway web server

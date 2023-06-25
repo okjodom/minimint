@@ -2,8 +2,8 @@ use bitcoin::{Address, Amount};
 use clap::{CommandFactory, Parser, Subcommand};
 use fedimint_core::config::FederationId;
 use fedimint_logging::TracingSetup;
-use ln_gateway::rpc::rpc_client::GatewayRpcClient;
-use ln_gateway::rpc::{
+use ln_gateway::rest::client::GatewayRpcClient;
+use ln_gateway::rest::{
     BackupPayload, BalancePayload, ConnectFedPayload, DepositAddressPayload, RestorePayload,
     WithdrawPayload,
 };

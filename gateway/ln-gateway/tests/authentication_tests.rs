@@ -13,8 +13,8 @@ mod fixtures;
 
 use std::future::Future;
 
-use ln_gateway::rpc::rpc_client::{GatewayRpcError, GatewayRpcResult};
-use ln_gateway::rpc::{BalancePayload, ConnectFedPayload, DepositAddressPayload, WithdrawPayload};
+use ln_gateway::rest::client::{GatewayRpcError, GatewayRpcResult};
+use ln_gateway::rest::{BalancePayload, ConnectFedPayload, DepositAddressPayload, WithdrawPayload};
 use reqwest::StatusCode;
 
 #[tokio::test(flavor = "multi_thread")]

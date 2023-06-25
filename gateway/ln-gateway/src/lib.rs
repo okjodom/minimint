@@ -3,7 +3,7 @@ pub mod db;
 pub mod lnd;
 pub mod lnrpc_client;
 pub mod ng;
-pub mod rpc;
+pub mod rest;
 pub mod types;
 pub mod utils;
 
@@ -46,7 +46,7 @@ use lightning::routing::gossip::RoutingFees;
 use lnrpc_client::{ILnRpcClient, RouteHtlcStream};
 use ng::{GatewayClientExt, GatewayClientModule, GatewayExtRegisterStates};
 use rand::Rng;
-use rpc::FederationInfo;
+use rest::FederationInfo;
 use secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -59,8 +59,8 @@ use crate::gatewaylnrpc::intercept_htlc_response::{Forward, Settle};
 use crate::lnd::GatewayLndClient;
 use crate::lnrpc_client::NetworkLnRpcClient;
 use crate::ng::{GatewayExtPayStates, GatewayExtReceiveStates, Htlc};
-use crate::rpc::rpc_server::run_webserver;
-use crate::rpc::{
+use crate::rest::server::run_webserver;
+use crate::rest::{
     BackupPayload, BalancePayload, ConnectFedPayload, DepositAddressPayload, GatewayInfo,
     InfoPayload, RestorePayload, WithdrawPayload,
 };

@@ -5,8 +5,8 @@
 mod fixtures;
 
 use fedimint_testing::federation::FederationTest;
-use ln_gateway::rpc::rpc_client::GatewayRpcClient;
-use ln_gateway::rpc::ConnectFedPayload;
+use ln_gateway::rest::client::GatewayRpcClient;
+use ln_gateway::rest::ConnectFedPayload;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn gatewayd_supports_connecting_multiple_federations() {

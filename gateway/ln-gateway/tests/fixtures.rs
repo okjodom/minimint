@@ -9,7 +9,7 @@ use fedimint_testing::btc::BitcoinTest;
 use fedimint_testing::federation::FederationTest;
 use fedimint_testing::fixtures::Fixtures;
 use fedimint_testing::gateway::GatewayTest;
-use ln_gateway::rpc::rpc_client::GatewayRpcClient;
+use ln_gateway::rest::client::GatewayRpcClient;
 
 pub async fn fixtures(
     password: Option<String>,
