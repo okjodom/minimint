@@ -1,4 +1,5 @@
-use fedimint_core::config::{ClientConfig, FederationId};
+use fedimint_core::api::InviteCode;
+use fedimint_core::config::FederationId;
 use fedimint_core::encoding::{Decodable, Encodable};
 use fedimint_core::{impl_db_lookup, impl_db_record};
 use fedimint_ln_common::LightningGateway;
@@ -22,10 +23,10 @@ pub struct FederationIdKeyPrefix;
 
 #[derive(Debug, Clone, Eq, PartialEq, Encodable, Decodable)]
 pub struct FederationConfig {
+    pub invite_code: InviteCode,
     pub mint_channel_id: u64,
     pub timelock_delta: u64,
     pub fees: RoutingFees,
-    pub config: ClientConfig,
 }
 
 impl_db_record!(

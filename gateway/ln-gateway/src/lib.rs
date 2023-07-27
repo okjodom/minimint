@@ -55,7 +55,6 @@ use lnrpc_client::{ILnRpcClient, LightningRpcError, RouteHtlcStream};
 use ng::pay::OutgoingPaymentError;
 use ng::GatewayClientExt;
 use rand::rngs::OsRng;
-use rand::Rng;
 use rpc::FederationInfo;
 use secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
@@ -64,6 +63,7 @@ use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, error, info, warn};
 use url::Url;
 
+use crate::db::FederationConfig;
 use crate::gatewaylnrpc::intercept_htlc_response::Forward;
 use crate::lnd::GatewayLndClient;
 use crate::lnrpc_client::NetworkLnRpcClient;
@@ -544,7 +544,7 @@ impl Gateway {
             let mut next_channel_id = channel_id_generator.load(Ordering::SeqCst);
 
             for config in configs {
-                let federation_id = config.config.federation_id;
+                let federation_id = config.invite_code.id;
                 let old_client = self.clients.read().await.get(&federation_id).cloned();
                 let client = self
                     .client_builder
@@ -628,36 +628,24 @@ impl Gateway {
         let invite_code = InviteCode::from_str(&payload.invite_code).map_err(|e| {
             GatewayError::InvalidMetadata(format!("Invalid federation member string {e}"))
         })?;
+        let federation_id = invite_code.id;
 
         // The gateway deterministically assigns a channel id (u64) to each federation
         // connected. TODO: explicitly handle the case where the channel id
         // overflows
-        let channel_id = self
+        let mint_channel_id = self
             .channel_id_generator
             .lock()
             .await
             .fetch_add(1, Ordering::SeqCst);
 
-        // Downloading the config can fail if another user tries to download at the same
-        // time. Just retry after a small delay
-        let gw_client_cfg = loop {
-            match self
-                .client_builder
-                .create_config(invite_code.clone(), channel_id, self.fees)
-                .await
-            {
-                Ok(gw_client_cfg) => break gw_client_cfg,
-                Err(_) => {
-                    let random_delay: f64 = rand::thread_rng().gen();
-                    tracing::warn!(
-                        "Error downloading client config, trying again in {random_delay}"
-                    );
-                    sleep(Duration::from_secs_f64(random_delay)).await;
-                }
-            }
+        let fed_config = FederationConfig {
+            invite_code,
+            mint_channel_id,
+            timelock_delta: 10,
+            fees: self.fees,
         };
 
-        let federation_id = gw_client_cfg.config.federation_id;
         let (route_hints, node_pub_key, _) =
             Self::fetch_lightning_route_info(self.lnrpc.clone()).await?;
         let old_client = self.clients.read().await.get(&federation_id).cloned();
@@ -665,7 +653,7 @@ impl Gateway {
         let client = self
             .client_builder
             .build(
-                gw_client_cfg.clone(),
+                fed_config.clone(),
                 node_pub_key,
                 self.lnrpc.clone(),
                 old_client,
@@ -674,13 +662,11 @@ impl Gateway {
 
         let balance_msat = client.get_balance().await;
 
-        self.register_client(client, federation_id, channel_id, route_hints)
+        self.register_client(client, federation_id, mint_channel_id, route_hints)
             .await?;
 
         let dbtx = self.gatewayd_db.begin_transaction().await;
-        self.client_builder
-            .save_config(gw_client_cfg.clone(), dbtx)
-            .await?;
+        self.client_builder.save_config(fed_config, dbtx).await?;
 
         Ok(FederationInfo {
             federation_id,
