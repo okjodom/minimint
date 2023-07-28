@@ -26,7 +26,7 @@ use axum::response::{IntoResponse, Response};
 use bitcoin::{Address, Txid};
 use bitcoin_hashes::hex::ToHex;
 use clap::{Parser, Subcommand};
-use client::StandardGatewayClientBuilder;
+use client::GatewayClientBuilder;
 use db::{FederationRegistrationKey, GatewayPublicKey};
 use fedimint_client::module::gen::{ClientModuleGen, ClientModuleGenRegistry};
 use fedimint_core::api::{FederationError, InviteCode};
@@ -196,7 +196,7 @@ impl Gatewayd {
             .registry
             .decoders(DEFAULT_MODULE_KINDS.iter().cloned())?;
 
-        let client_builder = StandardGatewayClientBuilder::new(
+        let client_builder = GatewayClientBuilder::new(
             self.data_dir.clone(),
             self.registry.clone(),
             LEGACY_HARDCODED_INSTANCE_ID_MINT,
@@ -217,7 +217,7 @@ impl Gatewayd {
     async fn start_gateway(
         self,
         task_group: &mut TaskGroup,
-        client_builder: StandardGatewayClientBuilder,
+        client_builder: GatewayClientBuilder,
         database: Database,
     ) -> Result<oneshot::Receiver<()>> {
         let mut tg = task_group.make_subgroup().await;
@@ -368,7 +368,7 @@ pub struct Gateway {
     lnrpc: Arc<dyn ILnRpcClient>,
     clients: Arc<RwLock<BTreeMap<FederationId, fedimint_client::Client>>>,
     scid_to_federation: Arc<RwLock<BTreeMap<u64, FederationId>>>,
-    client_builder: StandardGatewayClientBuilder,
+    client_builder: GatewayClientBuilder,
     channel_id_generator: Arc<Mutex<AtomicU64>>,
     fees: RoutingFees,
     gatewayd_db: Database,
@@ -381,7 +381,7 @@ impl Gateway {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         lnrpc: Arc<dyn ILnRpcClient>,
-        client_builder: StandardGatewayClientBuilder,
+        client_builder: GatewayClientBuilder,
         fees: RoutingFees,
         gatewayd_db: Database,
         api: Url,

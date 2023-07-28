@@ -16,13 +16,13 @@ use crate::ng::GatewayClientGen;
 use crate::{GatewayError, Result};
 
 #[derive(Debug, Clone)]
-pub struct StandardGatewayClientBuilder {
+pub struct GatewayClientBuilder {
     work_dir: PathBuf,
     registry: ClientModuleGenRegistry,
     primary_module: ModuleInstanceId,
 }
 
-impl StandardGatewayClientBuilder {
+impl GatewayClientBuilder {
     pub fn new(
         work_dir: PathBuf,
         registry: ClientModuleGenRegistry,
@@ -36,7 +36,7 @@ impl StandardGatewayClientBuilder {
     }
 }
 
-impl StandardGatewayClientBuilder {
+impl GatewayClientBuilder {
     pub async fn build(
         &self,
         config: FederationConfig,
