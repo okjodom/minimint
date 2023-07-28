@@ -53,6 +53,7 @@ impl FederationTest {
         let mut client_builder = ClientBuilder::default();
         client_builder.with_module_gens(self.client_gen.clone());
         client_builder.with_primary_module(self.primary_client);
+        // FIXME: <https://github.com/fedimint/fedimint/issues/2769>
         client_builder.with_config(client_config);
         client_builder.with_database(MemDatabase::new());
         client_builder
