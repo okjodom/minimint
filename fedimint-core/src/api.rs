@@ -51,7 +51,7 @@ use crate::query::{
     CurrentConsensus, DiscoverApiVersionSet, EventuallyConsistent, QueryStep, QueryStrategy,
     UnionResponsesSingle, VerifiableResponse,
 };
-use crate::task;
+use crate::task::{self, TaskHandle};
 use crate::transaction::{SerdeTransaction, Transaction};
 
 pub type MemberResult<T> = result::Result<T, MemberError>;
@@ -1008,6 +1008,19 @@ pub struct ConsensusContribution {
     pub time: SystemTime,
 }
 
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ConfigGenHandle {
+    #[serde(skip)]
+    pub task: TaskHandle,
+}
+
+impl PartialEq for ConfigGenHandle {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+impl Eq for ConfigGenHandle {}
+
 /// The state of the server returned via APIs
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub enum ServerStatus {
@@ -1018,6 +1031,8 @@ pub enum ServerStatus {
     SharingConfigGenParams,
     /// Ready to run config gen once all peers are ready
     ReadyForConfigGen,
+    /// Running config gen
+    RunningConfigGen(ConfigGenHandle),
     /// We failed running config gen
     ConfigGenFailed,
     /// Config is generated, peers should verify the config

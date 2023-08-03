@@ -342,7 +342,7 @@ impl Drop for TaskPanicGuard {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TaskHandle {
     inner: Arc<TaskGroupInner>,
 }

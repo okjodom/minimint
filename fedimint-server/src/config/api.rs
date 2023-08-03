@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -12,7 +12,7 @@ use fedimint_core::admin_client::{
     ConfigGenConnectionsRequest, ConfigGenParamsConsensus, ConfigGenParamsRequest,
     ConfigGenParamsResponse, PeerServerParams, WsAdminClient,
 };
-use fedimint_core::api::{ServerStatus, StatusResponse};
+use fedimint_core::api::{ConfigGenHandle, ServerStatus, StatusResponse};
 use fedimint_core::config::{
     ConfigGenModuleParams, ServerModuleGenParamsRegistry, ServerModuleGenRegistry,
 };
@@ -38,11 +38,12 @@ use crate::net::peers::DelayCalculator;
 use crate::{check_auth, ApiResult, HasApiContext};
 
 /// Serves the config gen API endpoints
+#[derive(Clone)]
 pub struct ConfigGenApi {
     /// Directory the configs will be created in
     data_dir: PathBuf,
     /// In-memory state machine
-    state: Mutex<ConfigGenState>,
+    state: Arc<Mutex<ConfigGenState>>,
     /// DB not really used
     db: Database,
     /// Tracks when the config is generated
@@ -61,7 +62,7 @@ impl ConfigGenApi {
     ) -> Self {
         Self {
             data_dir,
-            state: Mutex::new(ConfigGenState::new(settings)),
+            state: Arc::new(Mutex::new(ConfigGenState::new(settings))),
             db,
             config_generated_tx,
             task_group: task_group.clone(),
@@ -70,16 +71,17 @@ impl ConfigGenApi {
 
     // Sets the auth and decryption key derived from the password
     pub fn set_password(&self, auth: ApiAuth) -> ApiResult<()> {
-        let mut state = self.require_status(ServerStatus::AwaitingPassword)?;
+        let mut state = self.require_status(vec![ServerStatus::AwaitingPassword])?;
         state.auth = Some(auth);
         state.status = ServerStatus::SharingConfigGenParams;
         Ok(())
     }
 
-    fn require_status(&self, status: ServerStatus) -> ApiResult<MutexGuard<ConfigGenState>> {
+    // Require server to be one of the given status
+    fn require_status(&self, statuses: Vec<ServerStatus>) -> ApiResult<MutexGuard<ConfigGenState>> {
         let state = self.state.lock().expect("lock poisoned");
-        if state.status != status {
-            return Self::bad_request(&format!("Expected to be in {status:?} state"));
+        if !statuses.contains(&state.status) {
+            return Self::bad_request(&format!("Expected to be in one of {:?} states", statuses));
         }
         Ok(state)
     }
@@ -90,7 +92,7 @@ impl ConfigGenApi {
         request: ConfigGenConnectionsRequest,
     ) -> ApiResult<()> {
         {
-            let mut state = self.require_status(ServerStatus::SharingConfigGenParams)?;
+            let mut state = self.require_status(vec![ServerStatus::SharingConfigGenParams])?;
             state.set_request(request)?;
         }
         self.update_leader().await?;
@@ -139,7 +141,7 @@ impl ConfigGenApi {
     /// The leader passes consensus params, everyone passes local params
     pub async fn set_config_gen_params(&self, request: ConfigGenParamsRequest) -> ApiResult<()> {
         self.get_consensus_config_gen_params(&request).await?;
-        let mut state = self.require_status(ServerStatus::SharingConfigGenParams)?;
+        let mut state = self.require_status(vec![ServerStatus::SharingConfigGenParams])?;
         state.requested_params = Some(request);
         Ok(())
     }
@@ -184,22 +186,52 @@ impl ConfigGenApi {
     /// Once configs are generated, starts DKG and await its
     /// completion, calling a second time will return an error
     pub async fn run_dkg(&self) -> ApiResult<()> {
-        let leader = {
-            let mut state = self.require_status(ServerStatus::SharingConfigGenParams)?;
-            // Update our state
-            state.status = ServerStatus::ReadyForConfigGen;
+        let (should_send_update, leader) = {
+            let mut state = self.require_status(vec![
+                ServerStatus::SharingConfigGenParams,
+                ServerStatus::ReadyForConfigGen,
+            ])?;
+
+            let should_send_update = state.status != ServerStatus::ReadyForConfigGen;
+            if should_send_update {
+                state.status = ServerStatus::ReadyForConfigGen
+            }
+
             // Create a WSClient for the leader
-            state
-                .local
-                .clone()
-                .and_then(|local| local.leader_api_url.map(WsAdminClient::new))
+            (
+                should_send_update,
+                state
+                    .local
+                    .clone()
+                    .and_then(|local| local.leader_api_url.map(WsAdminClient::new)),
+            )
         };
 
-        self.update_leader().await?;
+        if should_send_update {
+            self.update_leader().await?;
+        }
 
+        let api = self.clone();
+        let task_group: TaskGroup = self.task_group.make_subgroup().await;
+
+        tokio::spawn(async move { Self::background_dkg_setup(api, leader, task_group).await });
+
+        Ok(())
+    }
+
+    async fn background_dkg_setup(
+        api: ConfigGenApi,
+        leader: Option<WsAdminClient>,
+        mut task_group: TaskGroup,
+    ) -> ApiResult<()> {
         // Followers wait for leader to signal readiness for DKG
+        let handle = task_group.make_handle();
         if let Some(client) = leader {
             loop {
+                if handle.is_shutting_down() {
+                    break;
+                }
+
                 let status = client.status().await.map_err(|_| {
                     ApiError::not_found("Unable to connect to the leader".to_string())
                 })?;
@@ -211,18 +243,24 @@ impl ConfigGenApi {
         };
 
         // Get params and registry
-        let request = self.get_requested_params()?;
-        let response = self.get_consensus_config_gen_params(&request).await?;
+        let request = api.get_requested_params()?;
+        let response = api.get_consensus_config_gen_params(&request).await?;
         let (params, registry) = {
             let state: MutexGuard<'_, ConfigGenState> =
-                self.require_status(ServerStatus::ReadyForConfigGen)?;
+                api.require_status(vec![ServerStatus::ReadyForConfigGen])?;
             let params = state.get_config_gen_params(&request, response.consensus)?;
             let registry = state.settings.registry.clone();
             (params, registry)
         };
 
+        {
+            let mut state = api.state.lock().expect("lock poisoned");
+            state.status = ServerStatus::RunningConfigGen(ConfigGenHandle {
+                task: handle.clone(),
+            });
+        }
+
         // Run DKG
-        let mut task_group: TaskGroup = self.task_group.make_subgroup().await;
         let config = ServerConfig::distributed_gen(
             &params,
             registry,
@@ -230,44 +268,39 @@ impl ConfigGenApi {
             &mut task_group,
         )
         .await;
+
         task_group
             .shutdown_join_all(None)
             .await
             .expect("shuts down");
 
         {
-            let mut state = self.state.lock().expect("lock poisoned");
+            let mut state = api.state.lock().expect("lock poisoned");
             match config {
                 Ok(config) => {
-                    self.write_configs(&config, &state)?;
+                    api.write_configs(&config, &state)?;
                     state.status = ServerStatus::VerifyingConfigs;
                     state.config = Some(config);
                 }
                 Err(e) => {
                     error!(
-                        target: fedimint_logging::LOG_NET_PEER_DKG,
-                        "DKG failed with {:?}", e
+                        target: fedimint_logging::LOG_NET_API,
+                        "DKG failed with {e:?}"
                     );
                     state.status = ServerStatus::ConfigGenFailed;
                 }
             }
         }
-        self.update_leader().await
+        api.update_leader().await
     }
 
     /// Returns the consensus config hash, tweaked by our TLS cert, to be shared
     /// with other peers
     pub fn get_verify_config_hash(&self) -> ApiResult<BTreeMap<PeerId, sha256::Hash>> {
-        let state = self
-            .require_status(ServerStatus::VerifyingConfigs)
-            .or_else(|_| self.require_status(ServerStatus::VerifiedConfigs))
-            .map_err(|_| {
-                ApiError::bad_request(format!(
-                    "Expected to be in {:?} or {:?} state",
-                    ServerStatus::VerifyingConfigs,
-                    ServerStatus::VerifiedConfigs
-                ))
-            })?;
+        let state = self.require_status(vec![
+            ServerStatus::VerifyingConfigs,
+            ServerStatus::VerifiedConfigs,
+        ])?;
 
         let config = state
             .config
@@ -296,7 +329,7 @@ impl ConfigGenApi {
     /// We have verified all our peer configs
     pub async fn verified_configs(&self) -> ApiResult<()> {
         {
-            let mut state = self.require_status(ServerStatus::VerifyingConfigs)?;
+            let mut state = self.require_status(vec![ServerStatus::VerifyingConfigs])?;
             state.status = ServerStatus::VerifiedConfigs;
         }
 
@@ -686,7 +719,7 @@ mod tests {
     use std::time::Duration;
 
     use fedimint_core::admin_client::{ConfigGenParamsRequest, WsAdminClient};
-    use fedimint_core::api::{FederationResult, ServerStatus, StatusResponse};
+    use fedimint_core::api::{ConfigGenHandle, FederationResult, ServerStatus, StatusResponse};
     use fedimint_core::config::{ServerModuleGenParamsRegistry, ServerModuleGenRegistry};
     use fedimint_core::db::mem_impl::MemDatabase;
     use fedimint_core::db::Database;
@@ -969,7 +1002,8 @@ mod tests {
                         .iter()
                         .map(|peer| peer.client.run_dkg(peer.auth.clone()))
                 ),
-                all_peers[0].wait_status(ServerStatus::ReadyForConfigGen)
+                all_peers[0]
+                    .wait_status(ServerStatus::RunningConfigGen(ConfigGenHandle::default()))
             );
             for result in results {
                 result.expect("DKG failed");
