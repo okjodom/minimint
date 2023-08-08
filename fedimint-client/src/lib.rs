@@ -1467,19 +1467,12 @@ async fn get_config(
     db: &Database,
     config_source: Option<ConfigSource>,
 ) -> anyhow::Result<ClientConfig> {
-    let mut dbtx = db.begin_transaction().await;
-    let config_res = match dbtx
-        .find_by_prefix(&ClientConfigKeyPrefix)
-        .await
-        .next()
-        .await
-    {
-        Some((_, config)) => {
-            // TODO: Enable after <https://github.com/fedimint/fedimint/pull/2855>
-            // assert!(
-            //     config_source.is_none(),
-            //     "Alternative config source provided but config was found in DB"
-            // );
+    let config_res = match get_config_from_db(db).await {
+        Some(config) => {
+            assert!(
+                config_source.is_none(),
+                "Alternative config source provided but config was found in DB"
+            );
             Ok(config)
         }
         None => {
@@ -1509,6 +1502,17 @@ async fn get_config(
     };
 
     config_res
+}
+
+pub async fn get_config_from_db(db: &Database) -> Option<ClientConfig> {
+    let mut dbtx = db.begin_transaction().await;
+    let config = dbtx
+        .find_by_prefix(&ClientConfigKeyPrefix)
+        .await
+        .next()
+        .await
+        .map(|(_, config)| config);
+    config
 }
 
 /// Tries to download the client config from the federation,
