@@ -142,6 +142,24 @@ async fn gatewayd_intercepts_htlc_and_settles_to_connected_federation() -> anyho
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn gatewayd_shutdown_and_reboot() {
+    let (gw, rpc, fed1, fed2, _) = fixtures::fixtures().await;
+
+    assert_eq!(rpc.get_info().await.unwrap().federations.len(), 0);
+    connect_federations(&rpc, &[fed1, fed2]).await.unwrap();
+
+    let gw = gw.shutdown_gateway().await;
+    // TODO: Shutdown one federation
+    // drop(fed1);
+
+    // TODO: Assert gateway offline
+    // assert_eq!(rpc.get_info().await.unwrap().federations.len(), 2);
+
+    gw.run_gateway().await;
+    assert_eq!(rpc.get_info().await.unwrap().federations.len(), 2);
+}
+
 pub async fn connect_federations(
     rpc: &GatewayRpcClient,
     feds: &[FederationTest],
