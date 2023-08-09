@@ -80,8 +80,8 @@ const INITIAL_SCID: u64 = 1;
 /// How long a gateway announcement stays valid
 pub const GW_ANNOUNCEMENT_TTL: Duration = Duration::from_secs(600);
 
-const ROUTE_HINT_RETRIES: usize = 10;
-const ROUTE_HINT_RETRY_SLEEP: Duration = Duration::from_secs(2);
+const LNRPC_API_RETRIES: usize = 10;
+const LNRPC_API_RETRY_SLEEP: Duration = Duration::from_secs(2);
 
 pub const DEFAULT_FEES: RoutingFees = RoutingFees {
     /// Base routing fee. Default is 0 msat
@@ -464,35 +464,59 @@ impl Gateway {
         }
     }
 
-    async fn fetch_lightning_route_info(
+    async fn fetch_route_hints(
         lnrpc: Arc<dyn ILnRpcClient>,
-    ) -> Result<(Vec<RouteHint>, PublicKey, String)> {
+        retries: usize,
+        wait: Duration,
+    ) -> Result<Vec<RouteHint>> {
         let mut num_retries = 0;
-        let (route_hints, node_pub_key, alias) = loop {
-            let route_hints: Vec<RouteHint> = lnrpc
-                .routehints()
-                .await?
-                .try_into()
-                .expect("Could not parse route hints");
+        let route_hints = loop {
+            let route_hints: Vec<RouteHint> =
+                lnrpc.routehints().await?.try_into().map_err(|e| {
+                    GatewayError::InvalidMetadata(format!("Could not parse route hints: {e}"))
+                })?;
 
-            let GetNodeInfoResponse { pub_key, alias } = lnrpc.info().await?;
-            let node_pub_key = PublicKey::from_slice(&pub_key)
-                .map_err(|e| GatewayError::InvalidMetadata(format!("Invalid node pubkey {e}")))?;
-
-            if !route_hints.is_empty() || num_retries == ROUTE_HINT_RETRIES {
-                break (route_hints, node_pub_key, alias);
+            if !route_hints.is_empty() || num_retries == retries {
+                break route_hints;
             }
 
             info!(
                 ?num_retries,
                 "LN node returned no route hints, trying again in {}s",
-                ROUTE_HINT_RETRY_SLEEP.as_secs()
+                wait.as_secs()
             );
             num_retries += 1;
-            sleep(ROUTE_HINT_RETRY_SLEEP).await;
+            sleep(wait).await;
         };
 
-        Ok((route_hints, node_pub_key, alias))
+        Ok(route_hints)
+    }
+
+    async fn fetch_node_info(
+        lnrpc: Arc<dyn ILnRpcClient>,
+        retries: usize,
+        wait: Duration,
+    ) -> Result<(PublicKey, String)> {
+        let mut num_retries = 0;
+        let (node_pub_key, alias) = loop {
+            let GetNodeInfoResponse { pub_key, alias } = lnrpc.info().await?;
+            let node_pub_key = PublicKey::from_slice(&pub_key)
+                .map_err(|e| GatewayError::InvalidMetadata(format!("Invalid node pubkey {e}")))?;
+
+            if num_retries == retries {
+                break (node_pub_key, alias);
+            }
+
+            info!(
+                ?num_retries,
+                "Failed to get node info, trying again in {}s",
+                wait.as_secs()
+            );
+            num_retries += 1;
+            sleep(wait).await;
+        };
+
+        Ok((node_pub_key, alias))
     }
 
     async fn register_clients_timer(&mut self) {
@@ -503,8 +527,14 @@ impl Gateway {
         self.task_group
             .spawn("register clients", move |handle| async move {
                 while !handle.is_shutting_down() {
-                    match Self::fetch_lightning_route_info(lnrpc.clone()).await {
-                        Ok((route_hints, _, _)) => {
+                    match Self::fetch_route_hints(
+                        lnrpc.clone(),
+                        LNRPC_API_RETRIES,
+                        LNRPC_API_RETRY_SLEEP,
+                    )
+                    .await
+                    {
+                        Ok(route_hints) => {
                             for (federation_id, client) in clients.read().await.iter() {
                                 if client
                                     .register_with_federation(
@@ -524,8 +554,10 @@ impl Gateway {
                             error!(
                                 "Could not retrieve route hints, gateway will not be registered."
                             );
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
                         }
-                    }
+                    };
 
                     // Allow a 15% buffer of the TTL before the re-registering gateway
                     // with the federations.
@@ -537,7 +569,9 @@ impl Gateway {
     }
 
     async fn load_clients(&mut self) -> Result<()> {
-        let (_, node_pub_key, _) = Self::fetch_lightning_route_info(self.lnrpc.clone()).await?;
+        let (node_pub_key, _) =
+            Self::fetch_node_info(self.lnrpc.clone(), LNRPC_API_RETRIES, LNRPC_API_RETRY_SLEEP)
+                .await?;
         let dbtx = self.gatewayd_db.begin_transaction().await;
         if let Ok(configs) = self.client_builder.load_configs(dbtx).await {
             let channel_id_generator = self.channel_id_generator.lock().await;
@@ -658,8 +692,9 @@ impl Gateway {
         };
 
         let federation_id = gw_client_cfg.config.federation_id;
-        let (route_hints, node_pub_key, _) =
-            Self::fetch_lightning_route_info(self.lnrpc.clone()).await?;
+        let (node_pub_key, _) =
+            Self::fetch_node_info(self.lnrpc.clone(), LNRPC_API_RETRIES, LNRPC_API_RETRY_SLEEP)
+                .await?;
         let old_client = self.clients.read().await.get(&federation_id).cloned();
 
         let client = self
@@ -674,6 +709,9 @@ impl Gateway {
 
         let balance_msat = client.get_balance().await;
 
+        let route_hints =
+            Self::fetch_route_hints(self.lnrpc.clone(), LNRPC_API_RETRIES, LNRPC_API_RETRY_SLEEP)
+                .await?;
         self.register_client(client, federation_id, channel_id, route_hints)
             .await?;
 
@@ -691,8 +729,6 @@ impl Gateway {
     pub async fn handle_get_info(&self, _payload: InfoPayload) -> Result<GatewayInfo> {
         let mut federations = Vec::new();
         let federation_clients = self.clients.read().await.clone().into_iter();
-        let (route_hints, node_pub_key, alias) =
-            Self::fetch_lightning_route_info(self.lnrpc.clone()).await?;
         for (federation_id, client) in federation_clients {
             let balance_msat = client.get_balance().await;
 
@@ -701,6 +737,12 @@ impl Gateway {
                 balance_msat,
             });
         }
+        // Fast lookup for route hints and other node info.
+        // This trades off accuracy of information shown for faster gateway info query.
+        let route_hints =
+            Self::fetch_route_hints(self.lnrpc.clone(), 0, Duration::from_secs(0)).await?;
+        let (node_pub_key, alias) =
+            Self::fetch_node_info(self.lnrpc.clone(), 0, Duration::from_secs(0)).await?;
 
         Ok(GatewayInfo {
             federations,
