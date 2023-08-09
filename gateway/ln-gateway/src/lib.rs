@@ -546,16 +546,23 @@ impl Gateway {
             for config in configs {
                 let federation_id = config.invite_code.id;
                 let old_client = self.clients.read().await.get(&federation_id).cloned();
-                let client = self
+                match self
                     .client_builder
                     .build(config.clone(), node_pub_key, self.lnrpc.clone(), old_client)
-                    .await?;
+                    .await
+                {
+                    Ok(client) => {
+                        self.clients.write().await.insert(federation_id, client);
+                    }
+                    Err(e) => {
+                        error!("Error loading federation {federation_id}: {e:?}");
+                    }
+                }
 
                 // Registering each client happens in the background, since we're loading the
                 // clients for the first time, just add them to the in-memory
                 // maps
                 let scid = config.mint_channel_id;
-                self.clients.write().await.insert(federation_id, client);
                 self.scid_to_federation
                     .write()
                     .await
