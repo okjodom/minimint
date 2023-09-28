@@ -2,7 +2,10 @@ Intention of this fork is to expiriment to have Torq (https://github.com/lncapit
 
 ### Setup
 
-- Setup and run Torq with a correct branch (with fedi grpc)
+- Setup and run Torq with a correct branch (image) (with fedi grpc)
+  - In folder running-torq there is a docker compose and torq.conf file to run
+  - Just run "docker compose up" in the folder
+  - localhost UI port is 3003 and UI password 1234
 - You might have to change FM_GATEWAY_LIGHTNING_ADDR ip adderss to your LAN ip in devimint/src/vars.rs
 - Setup and run Devimint ./docs/dev-env.md
 - Connect Torq to the LND node of Devimint (address of the node localhost:11009)
