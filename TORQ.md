@@ -12,6 +12,7 @@ Intention of this fork is to expiriment to have Torq (https://github.com/lncapit
 - Close the process of lnd gateway
   -  kill $(ps aux | grep -w -v grep | grep "gatewayd lnd" | awk '{print $2}')
 - Connect Torq to the LND node of Devimint (address of the node localhost:11009)
+  - In torq ui "add node"
   - Address of the node localhost:11009
   - Connection files are in temp folder created by Devimint
   - Enable "intercept htlcs" while adding the node!
