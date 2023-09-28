@@ -1,0 +1,12 @@
+Intention of this fork is to expiriment to have Torq (https://github.com/lncapital/torq/) as the gateway LN node for Fedimint. Torq could "proxy" any node that is connected to Torq and expose a single grpc interface to fedi gateway.
+
+### Setup
+
+- Setup and run Torq with a correct branch (with fedi grpc)
+- You might have to change FM_GATEWAY_LIGHTNING_ADDR ip adderss to your LAN ip in devimint/src/vars.rs
+- Setup and run Devimint ./docs/dev-env.md
+- Connect Torq to the LND node of Devimint (address of the node localhost:11009)
+  - Address of the node localhost:11009
+  - Connection files are in temp folder created by Devimint
+- In Torq settings, enable the FEDI grpc and set the FEDI gateway node to the LND node
+- It should now be possible to use the cln-gateway that is actually Torq (and the LND node)

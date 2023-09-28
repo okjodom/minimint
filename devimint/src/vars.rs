@@ -107,7 +107,8 @@ declare_vars! {
         FM_GATEWAY_PASSWORD: String = "theresnosecondbest";
 
         FM_CLN_EXTENSION_LISTEN_ADDRESS: String = "0.0.0.0:8177";
-        FM_GATEWAY_LIGHTNING_ADDR: String = "http://localhost:8177";
+        // Torq grpc address. Might have to change to LAN ip
+        FM_GATEWAY_LIGHTNING_ADDR: String = "http://localhost:50052";
         FM_FAUCET_BIND_ADDR: String = "0.0.0.0:15243";
 
         // clients

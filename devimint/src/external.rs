@@ -188,7 +188,8 @@ impl Lightningd {
             "--dev-bitcoind-poll=1",
             format!("--lightning-dir={}", utf8(cln_dir)),
             format!("--bitcoin-datadir={btc_dir}"),
-            "--plugin={extension_path}"
+            // don't use the plugin as we are using Torq instead
+            //"--plugin={extension_path}"
         );
 
         process_mgr.spawn_daemon("lightningd", cmd).await
