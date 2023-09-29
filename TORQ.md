@@ -18,3 +18,30 @@ Intention of this fork is to expiriment to have Torq (https://github.com/lncapit
   - Enable "intercept htlcs" while adding the node!
 - In Torq settings, set the FEDI gateway node to the LND node and enable the FEDI grpc 
 - It should now be possible to use the cln-gateway that is actually Torq (and the LND node)
+
+### Justin's Notes
+
+##### 1. "add node" in Torq UI
+##### 2. turn on "FEDI Gateway API" in Torq UI
+
+##### 3. register and fund the gateway
+
+```
+CODE=$(cat $FM_DATA_DIR/invite-code)
+gateway-cln connect-fed $CODE
+FID=$(gateway-cln info | jq -r .federations[0].federation_id)
+ADDR=$(gateway-cln address --federation-id $FID | tr -d '"')
+bitcoin-cli -regtest sendtoaddress $ADDR 1.0
+bitcoin-cli -generate 11
+gateway-cln info | jq -r .federations[0].balance_msat
+```
+
+##### 4. receive a lightning payment via torq gateway using fedimint-cli
+
+```
+INVOICE_JSON=$(fedimint-cli ln-invoice --amount 1000)
+INVOICE=$(echo $INVOICE_JSON | jq -r .invoice)
+OPID=$(echo $INVOICE_JSON | jq -r .operation_id)
+lightning-cli pay $INVOICE
+fedimint-cli wait-invoice $OPID
+```

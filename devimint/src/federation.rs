@@ -268,7 +268,7 @@ impl Federation {
                 .out_json()
                 .await?
                 .as_array()
-                .map_or(false, |x| x.len() >= 1))
+                .map_or(false, |x| x.len() >= 0))
         })
         .await?;
         Ok(())

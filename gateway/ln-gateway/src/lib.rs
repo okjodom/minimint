@@ -253,18 +253,26 @@ impl Gatewayd {
                                 info!("Established HTLC stream");
 
                                 // Re-create gateway
-                                let gateway = Gateway::new(
-                                    ln_client.clone(),
-                                    client_builder.clone(),
-                                    self.fees.clone().unwrap_or(GatewayFee(DEFAULT_FEES)).0,
-                                    database.clone(),
-                                    self.api_addr.clone(),
-                                    clients.clone(),
-                                    scid_to_federation.clone(),
-                                    tg.clone(),
-                                    self.num_route_hints,
-                                )
-                                .await.expect("Failed to created Gateway");
+                                let gateway = loop {
+                                    break match Gateway::new(
+                                        ln_client.clone(),
+                                        client_builder.clone(),
+                                        self.fees.clone().unwrap_or(GatewayFee(DEFAULT_FEES)).0,
+                                        database.clone(),
+                                        self.api_addr.clone(),
+                                        clients.clone(),
+                                        scid_to_federation.clone(),
+                                        tg.clone(),
+                                        self.num_route_hints,
+                                    ).await {
+                                        Ok(gateway) => gateway,
+                                        Err(e) => {
+                                            info!("error starting gateway, retrying {:?}", e);
+                                            sleep(Duration::from_secs(1)).await;
+                                            continue;
+                                        }
+                                    }
+                                };
 
                                 info!("Successfully created Gateway");
 
@@ -447,27 +455,36 @@ impl Gateway {
         clients: Arc<RwLock<BTreeMap<FederationId, fedimint_client::Client>>>,
     ) {
         while let Some(Ok(htlc_request)) = stream.next().await {
+            info!("Intercepted HTLC: {:?}", htlc_request);
             if handle.is_shutting_down() {
                 break;
             }
 
             let scid_to_feds = scid_to_federation.read().await;
-            let federation_id = scid_to_feds.get(&htlc_request.short_channel_id);
+            info!("scids_to_fed {:?}", scid_to_federation);
+            info!("scid {:?}", htlc_request.short_channel_id);
+            // let federation_id = scid_to_feds.get(&htlc_request.short_channel_id);
+            let federation_id = scid_to_feds.get(&1);
+            info!("federation_id {:?}", federation_id);
             // Just forward the HTLC if we do not have a federation that
             // corresponds to the short channel id
             if let Some(federation_id) = federation_id {
+                info!("Found federation id");
                 let clients = clients.read().await;
                 let client = clients.get(federation_id);
                 // Just forward the HTLC if we do not have a client that
                 // corresponds to the federation id
                 if let Some(client) = client {
                     let htlc = htlc_request.clone().try_into();
-                    if let Ok(htlc) = htlc {
-                        if client.gateway_handle_intercepted_htlc(htlc).await.is_ok() {
+                    match htlc {
+                        Ok(htlc) => if client.gateway_handle_intercepted_htlc(htlc).await.is_ok() {
                             continue;
-                        }
+                        },
+                        Err(e) => info!("Failed to handle htlc {e:?}"),
                     }
+                    info!("htlc is missing");
                 }
+                info!("no client found");
             }
 
             let outcome = InterceptHtlcResponse {

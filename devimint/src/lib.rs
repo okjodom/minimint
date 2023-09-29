@@ -38,7 +38,7 @@ pub struct DevFed {
     pub lnd: Lnd,
     pub fed: Federation,
     pub gw_cln: Gatewayd,
-    pub gw_lnd: Gatewayd,
+    // pub gw_lnd: Gatewayd,
     pub electrs: Electrs,
     pub esplora: Esplora,
     pub faucet: Faucet,
@@ -172,21 +172,21 @@ impl Faucet {
 pub async fn dev_fed(process_mgr: &ProcessManager) -> Result<DevFed> {
     let start_time = fedimint_core::time::now();
     let bitcoind = Bitcoind::new(process_mgr).await?;
-    let ((cln, lnd, gw_cln, gw_lnd, faucet), electrs, esplora, fed) = tokio::try_join!(
+    let ((cln, lnd, gw_cln, faucet), electrs, esplora, fed) = tokio::try_join!(
         async {
             let (cln, lnd) = tokio::try_join!(
                 Lightningd::new(process_mgr, bitcoind.clone()),
                 Lnd::new(process_mgr, bitcoind.clone())
             )?;
             info!(LOG_DEVIMINT, "lightning started");
-            let (gw_cln, gw_lnd, _, faucet) = tokio::try_join!(
+            let (gw_cln, _, faucet) = tokio::try_join!(
                 Gatewayd::new(process_mgr, LightningNode::Cln(cln.clone())),
-                Gatewayd::new(process_mgr, LightningNode::Lnd(lnd.clone())),
+                // Gatewayd::new(process_mgr, LightningNode::Lnd(lnd.clone())),
                 open_channel(&bitcoind, &cln, &lnd),
                 Faucet::new(process_mgr)
             )?;
             info!(LOG_DEVIMINT, "gateways started");
-            Ok((cln, lnd, gw_cln, gw_lnd, faucet))
+            Ok((cln, lnd, gw_cln, faucet))
         },
         Electrs::new(process_mgr, bitcoind.clone()),
         Esplora::new(process_mgr, bitcoind.clone()),
@@ -196,15 +196,16 @@ pub async fn dev_fed(process_mgr: &ProcessManager) -> Result<DevFed> {
         },
     )?;
     info!(LOG_DEVIMINT, "federation and gateways started");
-    tokio::try_join!(gw_cln.connect_fed(&fed), gw_lnd.connect_fed(&fed))?;
+    // Torq needs to call this
+    // tokio::try_join!(gw_cln.connect_fed(&fed))?;
     // Initialize fedimint-cli
     cmd!(fed, "join-federation", fed.invite_code()?)
         .run()
         .await?;
     info!(LOG_DEVIMINT, "await gateways registered");
-    fed.await_gateways_registered().await?;
+    // fed.await_gateways_registered().await?;
     info!(LOG_DEVIMINT, "gateways registered");
-    fed.use_gateway(&gw_cln).await?;
+    // fed.use_gateway(&gw_cln).await?;
     info!(
         LOG_DEVIMINT,
         "starting dev federation took {:?}",
@@ -217,7 +218,7 @@ pub async fn dev_fed(process_mgr: &ProcessManager) -> Result<DevFed> {
         faucet,
         fed,
         gw_cln,
-        gw_lnd,
+        // gw_lnd,
         electrs,
         esplora,
     })
