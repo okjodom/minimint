@@ -12,6 +12,7 @@ services:
     ports:
       # UI ON LOCALHOST PORT 3003
       - "3003:3000"
+      - "50052:50052"
     volumes:
       - ./:/home/torq/
   db:
