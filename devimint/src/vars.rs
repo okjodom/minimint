@@ -110,6 +110,8 @@ declare_vars! {
         FM_GATEWAY_LIGHTNING_ADDR: String = "http://localhost:8177";
         FM_FAUCET_BIND_ADDR: String = "0.0.0.0:15243";
 
+        FM_INVITE_CODE: PathBuf = FM_DATA_DIR.join("invite-code");
+
         // clients
         FM_LIGHTNING_CLI: String = f!("lightning-cli --network regtest --lightning-dir={}", utf8(&FM_CLN_DIR));
         FM_LNCLI: String = f!("lncli -n regtest --lnddir={} --rpcserver=localhost:11009", utf8(&FM_LND_DIR));

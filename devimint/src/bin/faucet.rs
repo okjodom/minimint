@@ -101,10 +101,8 @@ fn get_invite_code(invite_code: Option<String>) -> anyhow::Result<String> {
     match invite_code {
         Some(s) => Ok(s),
         None => {
-            let data_dir = std::env::var("FM_DATA_DIR")?;
-            Ok(std::fs::read_to_string(
-                PathBuf::from(data_dir).join("invite-code"),
-            )?)
+            let invite_code_path = std::env::var("FM_INVITE_CODE")?;
+            Ok(std::fs::read_to_string(invite_code_path)?)
         }
     }
 }
