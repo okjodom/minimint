@@ -1631,27 +1631,23 @@ async fn get_config(
 }
 
 pub async fn get_config_from_db(db: &Database) -> Option<ClientConfig> {
-    let mut dbtx = db.begin_transaction().await;
-    #[allow(clippy::let_and_return)]
-    let config = dbtx
+    db.begin_transaction()
+        .await
         .find_by_prefix(&ClientConfigKeyPrefix)
         .await
         .next()
         .await
-        .map(|(_, config)| config);
-    config
+        .map(|(_, config)| config)
 }
 
 pub async fn get_invite_code_from_db(db: &Database) -> Option<InviteCode> {
-    let mut dbtx = db.begin_transaction().await;
-    #[allow(clippy::let_and_return)]
-    let invite = dbtx
+    db.begin_transaction()
+        .await
         .find_by_prefix(&ClientInviteCodeKeyPrefix)
         .await
         .next()
         .await
-        .map(|(_, invite)| invite);
-    invite
+        .map(|(_, invite)| invite)
 }
 
 /// Tries to download the client config from the federation,
