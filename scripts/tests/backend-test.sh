@@ -25,7 +25,10 @@ then
     exit 1
 fi
 
-export RUST_BACKTRACE=1 
+export RUST_BACKTRACE=1
+
+cargo test --no-run --workspace --all-targets ${CARGO_PROFILE:+--profile ${CARGO_PROFILE}} # run it first without grep, to surface any issues that would be swallowed by it
+available_tests="$(cargo test --no-run --workspace --all-targets ${CARGO_PROFILE:+--profile ${CARGO_PROFILE}} 2>&1 | grep Executable | sed -n 's/.*(\([^)]*\)).*/\1/p')"
 
 eval "$(devimint env)"
 >&2 echo "### Setting up tests - complete"
@@ -34,18 +37,12 @@ export FM_TEST_USE_REAL_DAEMONS=1
 
 if [ -z "${FM_TEST_ONLY:-}" ] || [ "${FM_TEST_ONLY:-}" = "bitcoind" ]; then
   >&2 echo "### Testing against bitcoind"
-
-  # Note: Ideally `-E` flags can be used together, but that seems to trigger lots of problems
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=$(($(nproc) * 2)) \
-    -E 'package(fedimint-dummy-tests)'
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=$(($(nproc) * 2)) \
-    -E 'package(fedimint-mint-tests)'
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=$(($(nproc) * 2)) \
-    -E 'package(fedimint-wallet-tests)'
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=$(($(nproc) * 2)) \
-    -E 'package(fedimint-ln-tests)'
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=1 \
-    -E 'package(ln-gateway)'
+  $(echo $available_tests | tr ' ' '\n' | grep /ln_gateway-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_ln_tests-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_dummy_tests-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_mint_tests-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_wallet_tests-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_tests-) --test-threads=$(($(nproc) * 2)) "$@"
   >&2 echo "### Testing against bitcoind - complete"
 fi
 
@@ -55,8 +52,8 @@ export FM_BITCOIN_RPC_URL="tcp://127.0.0.1:$FM_PORT_ELECTRS"
 
 if [ -z "${FM_TEST_ONLY:-}" ] || [ "${FM_TEST_ONLY:-}" = "electrs" ]; then
   >&2 echo "### Testing against electrs"
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=$(($(nproc) * 2)) \
-    -E 'package(fedimint-wallet-tests)'
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_wallet_tests-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_tests-) wallet --test-threads=$(($(nproc) * 2)) "$@"
   >&2 echo "### Testing against electrs - complete"
 fi
 
@@ -66,8 +63,8 @@ export FM_BITCOIN_RPC_URL="http://127.0.0.1:$FM_PORT_ESPLORA"
 
 if [ -z "${FM_TEST_ONLY:-}" ] || [ "${FM_TEST_ONLY:-}" = "esplora" ]; then
   >&2 echo "### Testing against esplora"
-  cargo nextest run --locked --workspace --all-targets ${CARGO_PROFILE:+--cargo-profile ${CARGO_PROFILE}} ${CARGO_PROFILE:+-profile ${CARGO_PROFILE}} --test-threads=$(($(nproc) * 2)) \
-    -E 'package(fedimint-wallet-tests)'
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_wallet_tests-) --test-threads=$(($(nproc) * 2)) "$@"
+  $(echo $available_tests | tr ' ' '\n' | grep /fedimint_tests-) wallet --test-threads=$(($(nproc) * 2)) "$@"
   >&2 echo "### Testing against esplora - complete"
 fi
 
