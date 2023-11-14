@@ -27,9 +27,9 @@ fn fixtures() -> Fixtures {
 
 /// Setup a gateway connected to the fed and client
 async fn gateway(fixtures: &Fixtures, fed: &FederationTest) -> GatewayTest {
-    let lnd = fixtures.lnd().await;
+    let cln = fixtures.cln().await;
     let mut gateway = fixtures
-        .new_gateway(lnd, 0, Some(DEFAULT_GATEWAY_PASSWORD.to_string()))
+        .new_gateway(cln, 0, Some(DEFAULT_GATEWAY_PASSWORD.to_string()))
         .await;
     gateway.connect_fed(fed).await;
     gateway
@@ -201,8 +201,8 @@ async fn gateway_protects_preimage_for_payment() -> anyhow::Result<()> {
     let (op, outpoint) = client2_dummy_module.print_money(sats(10000)).await?;
     client2.await_primary_module_output(op, outpoint).await?;
 
-    let cln = fixtures.cln().await;
-    let invoice = cln.invoice(Amount::from_sats(100), None).await?;
+    let lnd = fixtures.lnd().await;
+    let invoice = lnd.invoice(Amount::from_sats(100), None).await?;
 
     // Pay invoice with client1
     let OutgoingLightningPayment {
@@ -256,8 +256,8 @@ async fn cannot_pay_same_external_invoice_twice() -> anyhow::Result<()> {
     let (op, outpoint) = dummy_module.print_money(sats(1000)).await?;
     client.await_primary_module_output(op, outpoint).await?;
 
-    let cln = fixtures.cln().await;
-    let invoice = cln.invoice(Amount::from_sats(100), None).await?;
+    let lnd = fixtures.lnd().await;
+    let invoice = lnd.invoice(Amount::from_sats(100), None).await?;
 
     // Pay the invoice for the first time
     let OutgoingLightningPayment {
