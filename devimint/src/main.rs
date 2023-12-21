@@ -204,10 +204,41 @@ pub async fn latency_tests(dev_fed: DevFed) -> Result<()> {
         fm_internal_pay.push(start_time.elapsed());
     }
 
+    info!("Testing latency of gateway swap");
+    let mut gateway_swap = Vec::with_capacity(iterations);
+
+    let DevFed { fed: fed2, .. } = dev_fed2;
+    let sender = fed2.new_joined_client("gateway-swap-sender").await?;
+    fed2.pegin_client(10_000_000, &sender).await?;
+    for _ in 0..iterations {
+        let recv = cmd!(
+            client,
+            "ln-invoice",
+            "--amount=1000000msat",
+            "--description=internal-swap-invoice"
+        )
+        .out_json()
+        .await?;
+        let invoice = recv["invoice"]
+            .as_str()
+            .context("invoice must be string")?
+            .to_owned();
+        let recv_op = recv["operation_id"]
+            .as_str()
+            .context("operation id must be string")?
+            .to_owned();
+
+        let start_time = Instant::now();
+        cmd!(sender, "ln-pay", invoice).run().await?;
+        cmd!(client, "await-invoice", recv_op).run().await?;
+        gateway_swap.push(start_time.elapsed());
+    }
+
     let reissue_stats = stats_for(reissues);
     let ln_sends_stats = stats_for(ln_sends);
     let ln_receives_stats = stats_for(ln_receives);
     let fm_pay_stats = stats_for(fm_internal_pay);
+    let gw_swap_stats = stats_for(gateway_swap);
 
     info!("Testing latency of restore");
     let backup_secret = cmd!(client, "print-secret").out_json().await?["secret"]
@@ -234,6 +265,7 @@ pub async fn latency_tests(dev_fed: DevFed) -> Result<()> {
               LN SEND: {ln_sends_stats}\n\
               LN RECV: {ln_receives_stats}\n\
               FM PAY: {fm_pay_stats}\n\
+              FM PAY: {gw_swap_stats}\n\
               RESTORE: {restore_time:?}"
     );
     // FIXME: should be smaller
@@ -241,17 +273,20 @@ pub async fn latency_tests(dev_fed: DevFed) -> Result<()> {
     assert!(ln_sends_stats.median < Duration::from_secs(6));
     assert!(ln_receives_stats.median < Duration::from_secs(6));
     assert!(fm_pay_stats.median < Duration::from_secs(6));
+    assert!(gw_swap_stats.median < Duration::from_secs(6));
     assert!(restore_time < Duration::from_secs(160));
     let factor = 3; // FIXME: should be much smaller
     assert!(reissue_stats.p90 < reissue_stats.median * factor);
     assert!(ln_sends_stats.p90 < ln_sends_stats.median * factor);
     assert!(ln_receives_stats.p90 < ln_receives_stats.median * factor);
     assert!(fm_pay_stats.p90 < fm_pay_stats.median * factor);
+    assert!(gw_swap_stats.p90 < gw_swap_stats.median * factor);
     let factor = 3.1f64; // FIXME: should be much smaller
     assert!(reissue_stats.max.as_secs_f64() < reissue_stats.p90.as_secs_f64() * factor);
     assert!(ln_sends_stats.max.as_secs_f64() < ln_sends_stats.p90.as_secs_f64() * factor);
     assert!(ln_receives_stats.max.as_secs_f64() < ln_receives_stats.p90.as_secs_f64() * factor);
     assert!(fm_pay_stats.max.as_secs_f64() < fm_pay_stats.p90.as_secs_f64() * factor);
+    assert!(gw_swap_stats.max.as_secs_f64() < gw_swap_stats.p90.as_secs_f64() * factor);
     Ok(())
 }
 
