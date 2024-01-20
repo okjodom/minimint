@@ -10,30 +10,14 @@ use tracing::{error, instrument};
 
 use crate::gateway_lnrpc::intercept_htlc_response::Action;
 use crate::gateway_lnrpc::{InterceptHtlcRequest, InterceptHtlcResponse};
-use crate::lightning::alby::GatewayWebhookClient;
-use crate::lightning::LightningRpcError;
+use crate::lightning::{LightningRpcError, WebhookClient};
 use crate::GatewayError;
-
-#[derive(Clone)]
-pub enum WebhookClients {
-    Alby(GatewayWebhookClient),
-}
-
-impl WebhookClients {
-    async fn set_outcome_sender(&self, htlc_id: u64, sender: Sender<InterceptHtlcResponse>) {
-        match self {
-            WebhookClients::Alby(client) => {
-                client.outcomes.lock().await.insert(htlc_id, sender);
-            }
-        }
-    }
-}
 
 pub async fn run_webhook_server(
     bind_addr: SocketAddr,
     task_group: &mut TaskGroup,
     htlc_stream_sender: tokio::sync::mpsc::Sender<Result<InterceptHtlcRequest, tonic::Status>>,
-    client: WebhookClients,
+    client: WebhookClient,
 ) -> axum::response::Result<()> {
     let app = Router::new()
         .route("/handle_htlc", post(handle_htlc))
@@ -147,7 +131,7 @@ async fn handle_htlc(
     Extension(htlc_stream_sender): Extension<
         tokio::sync::mpsc::Sender<Result<InterceptHtlcRequest, tonic::Status>>,
     >,
-    Extension(client): Extension<WebhookClients>,
+    Extension(client): Extension<WebhookClient>,
     params: Json<WebhookHandleHtlcParams>,
 ) -> Result<Json<WebhookHandleHtlcResponse>, GatewayError> {
     let htlc = params.htlc.clone();

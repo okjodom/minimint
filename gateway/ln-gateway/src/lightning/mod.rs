@@ -1,5 +1,6 @@
 pub mod alby;
 pub mod cln;
+pub mod coinos;
 pub mod lnd;
 
 use std::collections::BTreeMap;
@@ -19,8 +20,9 @@ use thiserror::Error;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
 
-use self::alby::GatewayWebhookClient;
+use self::alby::GatewayAlbyClient;
 use self::cln::{NetworkLnRpcClient, RouteHtlcStream};
+use self::coinos::GatewayCoinosClient;
 use self::lnd::GatewayLndClient;
 use crate::gateway_lnrpc::{
     EmptyResponse, GetNodeInfoResponse, GetRouteHintsResponse, InterceptHtlcResponse,
@@ -131,6 +133,13 @@ pub enum LightningMode {
         #[arg(long = "api-key", env = "FM_GATEWAY_LIGHTNING_API_KEY")]
         api_key: String,
     },
+    #[clap(name = "coinos")]
+    Coinos {
+        #[arg(long = "bind-addr", env = "FM_GATEWAY_WEBSERVER_BIND_ADDR")]
+        bind_addr: SocketAddr,
+        #[arg(long = "api-key", env = "FM_GATEWAY_LIGHTNING_API_KEY")]
+        api_key: String,
+    },
 }
 
 #[async_trait]
@@ -159,7 +168,30 @@ impl LightningBuilder for GatewayLightningBuilder {
             ),
             LightningMode::Alby { bind_addr, api_key } => {
                 let outcomes = Arc::new(Mutex::new(BTreeMap::new()));
-                Box::new(GatewayWebhookClient::new(bind_addr, api_key, outcomes).await)
+                Box::new(GatewayAlbyClient::new(bind_addr, api_key, outcomes).await)
+            }
+            LightningMode::Coinos { bind_addr, api_key } => {
+                let outcomes = Arc::new(Mutex::new(BTreeMap::new()));
+                Box::new(GatewayCoinosClient::new(bind_addr, api_key, outcomes).await)
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum WebhookClient {
+    Alby(GatewayAlbyClient),
+    Coinos(GatewayCoinosClient),
+}
+
+impl WebhookClient {
+    pub async fn set_outcome_sender(&self, htlc_id: u64, sender: Sender<InterceptHtlcResponse>) {
+        match self {
+            WebhookClient::Alby(client) => {
+                client.outcomes.lock().await.insert(htlc_id, sender);
+            }
+            WebhookClient::Coinos(client) => {
+                client.outcomes.lock().await.insert(htlc_id, sender);
             }
         }
     }
