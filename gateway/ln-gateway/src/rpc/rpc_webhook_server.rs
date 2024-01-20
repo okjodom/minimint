@@ -5,7 +5,6 @@ use axum::{Extension, Json, Router};
 use axum_macros::debug_handler;
 use fedimint_core::task::TaskGroup;
 use serde::{Deserialize, Deserializer, Serialize};
-use tokio::sync::oneshot::Sender;
 use tracing::{error, instrument};
 
 use crate::gateway_lnrpc::intercept_htlc_response::Action;
