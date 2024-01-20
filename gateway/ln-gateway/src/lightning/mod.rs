@@ -19,7 +19,7 @@ use thiserror::Error;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
 
-use self::alby::GatewayAlbyClient;
+use self::alby::GatewayWebhookClient;
 use self::cln::{NetworkLnRpcClient, RouteHtlcStream};
 use self::lnd::GatewayLndClient;
 use crate::gateway_lnrpc::{
@@ -159,7 +159,7 @@ impl LightningBuilder for GatewayLightningBuilder {
             ),
             LightningMode::Alby { bind_addr, api_key } => {
                 let outcomes = Arc::new(Mutex::new(BTreeMap::new()));
-                Box::new(GatewayAlbyClient::new(bind_addr, api_key, outcomes).await)
+                Box::new(GatewayWebhookClient::new(bind_addr, api_key, outcomes).await)
             }
         }
     }

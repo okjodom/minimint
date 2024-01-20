@@ -21,7 +21,7 @@ use crate::gateway_lnrpc::{
     EmptyResponse, GetNodeInfoResponse, GetRouteHintsResponse, InterceptHtlcRequest,
     InterceptHtlcResponse, PayInvoiceRequest, PayInvoiceResponse,
 };
-use crate::rpc::rpc_webhook_server::run_webhook_server;
+use crate::rpc::rpc_webhook_server::{run_webhook_server, WebhookClients};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct AlbyPayResponse {
@@ -35,13 +35,13 @@ struct AlbyPayResponse {
 }
 
 #[derive(Clone)]
-pub struct GatewayAlbyClient {
+pub struct GatewayWebhookClient {
     bind_addr: SocketAddr,
     api_key: String,
     pub outcomes: Arc<Mutex<BTreeMap<u64, Sender<InterceptHtlcResponse>>>>,
 }
 
-impl GatewayAlbyClient {
+impl GatewayWebhookClient {
     pub async fn new(
         bind_addr: SocketAddr,
         api_key: String,
@@ -56,14 +56,14 @@ impl GatewayAlbyClient {
     }
 }
 
-impl fmt::Debug for GatewayAlbyClient {
+impl fmt::Debug for GatewayWebhookClient {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "AlbyClient")
     }
 }
 
 #[async_trait]
-impl ILnRpcClient for GatewayAlbyClient {
+impl ILnRpcClient for GatewayWebhookClient {
     /// Returns the public key of the lightning node to use in route hint
     ///
     /// What should we do here with Alby?
@@ -153,11 +153,16 @@ impl ILnRpcClient for GatewayAlbyClient {
         let new_client =
             Arc::new(Self::new(self.bind_addr, self.api_key.clone(), self.outcomes.clone()).await);
 
-        run_webhook_server(self.bind_addr, task_group, gateway_sender.clone(), *self)
-            .await
-            .map_err(|_| LightningRpcError::FailedToRouteHtlcs {
-                failure_reason: "Failed to start webhook server".to_string(),
-            })?;
+        run_webhook_server(
+            self.bind_addr,
+            task_group,
+            gateway_sender.clone(),
+            WebhookClients::Alby(*self),
+        )
+        .await
+        .map_err(|_| LightningRpcError::FailedToRouteHtlcs {
+            failure_reason: "Failed to start webhook server".to_string(),
+        })?;
 
         Ok((Box::pin(ReceiverStream::new(gateway_receiver)), new_client))
     }
