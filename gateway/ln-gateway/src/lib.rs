@@ -1220,6 +1220,7 @@ impl Gateway {
 
         for config in configs {
             let federation_id = config.invite_code.federation_id();
+            let scid = config.mint_channel_id;
 
             if let Ok(client) = Spanned::try_new(
                 info_span!("client", federation_id  = %federation_id.clone()),
@@ -1230,7 +1231,6 @@ impl Gateway {
                 // Registering each client happens in the background, since we're loading
                 // the clients for the first time, just add them to
                 // the in-memory maps
-                let scid = config.mint_channel_id;
                 self.clients.write().await.insert(federation_id, client);
                 self.scid_to_federation
                     .write()
@@ -1240,8 +1240,8 @@ impl Gateway {
                 warn!("Failed to load client for federation: {federation_id}");
             }
 
-            if config.mint_channel_id > next_channel_id {
-                next_channel_id = config.mint_channel_id + 1;
+            if scid > next_channel_id {
+                next_channel_id = scid + 1;
             }
         }
 
