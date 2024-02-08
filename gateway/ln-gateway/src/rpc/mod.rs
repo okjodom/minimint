@@ -107,6 +107,7 @@ pub enum GatewayRequest {
     Info(GatewayRequestInner<InfoPayload>),
     Config(GatewayRequestInner<ConfigPayload>),
     ConnectFederation(GatewayRequestInner<ConnectFedPayload>),
+    LeaveFederation(GatewayRequestInner<LeaveFedPayload>),
     PayInvoice(GatewayRequestInner<PayInvoicePayload>),
     Balance(GatewayRequestInner<BalancePayload>),
     DepositAddress(GatewayRequestInner<DepositAddressPayload>),
@@ -149,6 +150,11 @@ impl_gateway_request_trait!(
     ConnectFedPayload,
     FederationInfo,
     GatewayRequest::ConnectFederation
+);
+impl_gateway_request_trait!(
+    LeaveFedPayload,
+    FederationInfo,
+    GatewayRequest::LeaveFederation
 );
 impl_gateway_request_trait!(PayInvoicePayload, Preimage, GatewayRequest::PayInvoice);
 impl_gateway_request_trait!(BalancePayload, Amount, GatewayRequest::Balance);
