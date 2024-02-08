@@ -674,9 +674,11 @@ impl Gateway {
                         .await,
                 );
             }
+            let channels = self.scid_to_federation.read().await.clone();
 
             return Ok(GatewayInfo {
                 federations,
+                channels,
                 version_hash: fedimint_build_code_version_env!().to_string(),
                 lightning_pub_key: Some(lightning_context.lightning_public_key.to_hex()),
                 lightning_alias: Some(lightning_context.lightning_alias.clone()),
@@ -690,6 +692,7 @@ impl Gateway {
 
         Ok(GatewayInfo {
             federations: vec![],
+            channels: BTreeMap::new(),
             version_hash: fedimint_build_code_version_env!().to_string(),
             lightning_pub_key: None,
             lightning_alias: None,
@@ -964,6 +967,10 @@ impl Gateway {
         let federation_info = self
             .make_federation_info(client.value(), payload.federation_id)
             .await;
+        self.scid_to_federation
+            .write()
+            .await
+            .retain(|_, fid| *fid != payload.federation_id);
 
         let mut dbtx = self.gateway_db.begin_transaction().await;
         dbtx.remove_entry(&FederationIdKey {
