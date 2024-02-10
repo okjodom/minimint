@@ -495,7 +495,7 @@ impl LightningClientModule {
 
         // Do not create the funding transaction if the gateway is not currently
         // available
-        self.verify_gateway_availability(&gateway).await?;
+        // self.verify_gateway_availability(&gateway).await?;
 
         let consensus_count = self
             .module_api

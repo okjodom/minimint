@@ -1389,7 +1389,10 @@ impl Gateway {
     ) -> std::result::Result<LightningContext, LightningRpcError> {
         match self.state.read().await.clone() {
             GatewayState::Running { lightning_context } => Ok(lightning_context),
-            _ => Err(LightningRpcError::FailedToConnect),
+            state => {
+                info!("Gateway is not running, cannot get lightning context: {state:?}");
+                Err(LightningRpcError::FailedToConnect)
+            }
         }
     }
 }

@@ -46,7 +46,9 @@ pub struct GatewayTest {
     // Listening address of the lightning node
     pub listening_addr: String,
     /// `TaskGroup` that is running the test
-    task_group: TaskGroup,
+    root_tg: TaskGroup,
+    /// `TaskGroup` that is running the gateway webserver
+    server_tg: TaskGroup,
 }
 
 impl GatewayTest {
@@ -135,22 +137,16 @@ impl GatewayTest {
         .await
         .expect("Failed to create gateway");
 
-        let gateway_run = gateway.clone();
-        let root_group = TaskGroup::new();
-        let mut tg = root_group.clone();
-        root_group
-            .spawn("Gateway Run", |_handle| async move {
-                gateway_run
-                    .run(&mut tg)
-                    .await
-                    .expect("Failed to start gateway");
-            })
-            .await;
-
-        // Wait for the gateway web server to be available
-        GatewayTest::wait_for_webserver(versioned_api.clone(), cli_password)
-            .await
-            .expect("Gateway web server failed to start");
+        let root_tg = TaskGroup::new();
+        let server_tg = root_tg.clone();
+        GatewayTest::start_webserver(
+            gateway.clone(),
+            versioned_api.clone(),
+            server_tg.clone(),
+            cli_password,
+        )
+        .await
+        .expect("Gateway web server failed to start");
 
         // Wait for the gateway to be in the configuring or running state
         GatewayTest::wait_for_gateway_state(gateway.clone(), |gw_state| {
@@ -169,20 +165,28 @@ impl GatewayTest {
             gateway,
             node_pub_key: PublicKey::from_slice(info.pub_key.as_slice()).unwrap(),
             listening_addr,
-            task_group: root_group,
+            root_tg,
+            server_tg,
         }
     }
 
-    /// Waits for the webserver to be ready.
+    /// Starts and waits for the webserver to be ready.
     ///
     /// This function is used to ensure that the webserver is fully initialized
-    /// and ready to accept incoming requests. It is designed to be used in
-    /// a concurrent environment where the webserver might be initialized in a
-    /// separate thread or task.
-    pub async fn wait_for_webserver(
+    /// and ready to accept incoming requests
+    pub async fn start_webserver(
+        gateway: Gateway,
         versioned_api: SafeUrl,
+        task_group: TaskGroup,
         password: Option<String>,
     ) -> anyhow::Result<()> {
+        let mut tg = task_group.clone();
+        task_group
+            .spawn("Gateway Run", |_handle| async move {
+                gateway.run(&mut tg).await.expect("Failed to start gateway");
+            })
+            .await;
+
         let rpc = GatewayRpcClient::new(versioned_api, password);
         for _ in 0..30 {
             let rpc_result = rpc.get_info().await;
@@ -196,6 +200,19 @@ impl GatewayTest {
         Err(anyhow!(
             "Gateway web server did not come up within 30 seconds"
         ))
+    }
+
+    /// Stops the webserver and waits for it to shutdown
+    ///
+    /// This function blocks until the webserver has fully shutdown
+    pub fn stop_webserver(&self) {
+        block_in_place(move || {
+            block_on(async move {
+                if let Err(e) = self.server_tg.clone().shutdown_join_all(None).await {
+                    warn!("Got error shutting down Gateway webserver: {e:?}")
+                }
+            })
+        });
     }
 
     pub async fn wait_for_gateway_state(
@@ -221,7 +238,7 @@ impl Drop for GatewayTest {
     fn drop(&mut self) {
         block_in_place(move || {
             block_on(async move {
-                if let Err(e) = self.task_group.clone().shutdown_join_all(None).await {
+                if let Err(e) = self.root_tg.clone().shutdown_join_all(None).await {
                     warn!("Got error shutting down GatewayTest: {e:?}")
                 }
             })
