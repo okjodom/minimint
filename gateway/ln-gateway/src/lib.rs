@@ -85,6 +85,7 @@ use rpc::{
 };
 use secp256k1::schnorr::Signature;
 use secp256k1::PublicKey;
+use serde::{Deserialize, Serialize};
 use state_machine::pay::OutgoingPaymentError;
 use state_machine::GatewayClientModule;
 use strum::IntoEnumIterator;
@@ -1601,7 +1602,12 @@ impl Gateway {
             .ok_or(SendPaymentErrorV2::UnknownFederationId)?
             .value();
 
-        let operation_id = OperationId(payload.contract.contract_id().0.into_inner());
+        // The operation id is equal to the contract id which also doubles as the
+        // message signed by the gateway via the forfeit signature to forfeit
+        // the gateways claim to a contract in case of cancellation. We only create a
+        // forfeit signature after the we have started the send state machine to
+        // prevent replay attacks with a previously cancelled outgoing contract
+        let operation_id = OperationId::from_encodable(payload.contract.clone());
 
         let module = client.get_first_module::<GatewayClientModuleV2>();
 
@@ -1609,6 +1615,9 @@ impl Gateway {
             return Ok(module.subscribe_send(operation_id, payload.contract).await);
         }
 
+        // Since the following three checks may only fail due to client side
+        // programming error we do not have to enable cancellation and can check
+        // them before we start the state machine.
         if payload.contract.claim_pk != module.keypair.public_key() {
             return Err(SendPaymentErrorV2::NotOurKey);
         }
@@ -1617,6 +1626,13 @@ impl Gateway {
             return Err(SendPaymentErrorV2::InvalidInvoiceHash);
         }
 
+        let invoice_msats = payload
+            .invoice
+            .amount_milli_satoshis()
+            .ok_or(SendPaymentErrorV2::InvoiceMissingAmount)?;
+
+        // We need to check that the contract has been confirmed by the federation
+        // before we start the state machine to prevent DOS attacks.
         let max_delay = module
             .module_api
             .outgoing_contract_expiration(&payload.contract.contract_id())
@@ -1625,29 +1641,11 @@ impl Gateway {
             .ok_or(SendPaymentErrorV2::UnconfirmedContract)?
             .saturating_sub(OUTGOING_CLTV_DELTA_V2);
 
-        if max_delay == 0 {
-            return Err(SendPaymentErrorV2::TimeoutTooClose);
-        }
-
-        let invoice_msats = payload
-            .invoice
-            .amount_milli_satoshis()
-            .ok_or(SendPaymentErrorV2::InvoiceMissingAmount)?;
-
-        let min_contract_amount = self.payment_fees_v2().send.add_fee(invoice_msats);
-
-        if payload.contract.amount < min_contract_amount {
-            return Err(SendPaymentErrorV2::Underfunded);
-        }
-
-        let additional_fee = payload.contract.amount - min_contract_amount;
-        let max_ln_fee = additional_fee.msats + (min_contract_amount.msats - invoice_msats) / 2;
-
         module
             .start_send_state_machine(
                 operation_id,
                 max_delay,
-                max_ln_fee,
+                invoice_msats,
                 payload.invoice,
                 payload.contract.clone(),
             )
@@ -1863,7 +1861,7 @@ impl Display for PrettyInterceptHtlcRequest<'_> {
     }
 }
 
-#[derive(Error, Debug, Clone, Eq, PartialEq)]
+#[derive(Error, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum SendPaymentErrorV2 {
     #[error("The federation id is unknown")]
     UnknownFederationId,
@@ -1875,14 +1873,8 @@ pub enum SendPaymentErrorV2 {
     NotOurKey,
     #[error("Invoice is missing amount")]
     InvoiceMissingAmount,
-    #[error("Outgoing contract is underfunded")]
-    Underfunded,
-    #[error("The gateway can not reach the federation to confirm contract")]
+    #[error("The gateway can not reach the federation to confirm the contract")]
     FederationUnreachable,
-    #[error("The contract's timeout is in the past or does not allow for a safety margin")]
-    TimeoutTooClose,
-    #[error("The invoice is expired.")]
-    InvoiceExpired,
 }
 
 #[derive(Error, Debug)]
@@ -1911,7 +1903,7 @@ pub enum CreateInvoiceErrorV2 {
     HashAlreadyRegistered,
     #[error("The contract is already expired")]
     ContractExpired,
-    #[error("Incoming contract would be underfunded")]
+    #[error("Incoming contract would be unbalanced")]
     Unbalanced,
     #[error("The lightning node failed to create an invoice")]
     NodeError(String),
