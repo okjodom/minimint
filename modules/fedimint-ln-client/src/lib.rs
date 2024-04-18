@@ -1318,6 +1318,7 @@ impl LightningClientModule {
         let input = incoming_contract_account.claim();
         let client_input = ClientInput::<LightningInput, LightningClientStateMachines> {
             input,
+            amount: incoming_contract_account.amount,
             keys: vec![key_pair],
             state_machines: Arc::new(|_, _| vec![]),
         };
