@@ -405,16 +405,8 @@ impl ClientModule for LightningClientModule {
         }
     }
 
-    fn input_amount(
-        &self,
-        input: &<Self::Common as ModuleCommon>::Input,
-    ) -> Option<TransactionItemAmount> {
-        let input = input.maybe_v0_ref()?;
-
-        Some(TransactionItemAmount {
-            amount: input.amount,
-            fee: self.cfg.fee_consensus.contract_input,
-        })
+    fn input_fee(&self, _input: &<Self::Common as ModuleCommon>::Input) -> Option<Amount> {
+        Some(self.cfg.fee_consensus.contract_input)
     }
 
     fn output_amount(
