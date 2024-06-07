@@ -29,7 +29,7 @@ lightning = { version = "0.0.122", default-features = false, features = ["no-std
 lightning-invoice = { version = "0.30.0", features = [ "serde" ] }
 fedimint-client = { workspace = true }
 fedimint-core = { workspace = true }
-secp256k1 = { version="0.27.0", default-features=false }
+secp256k1 = { version="0.29.0", default-features=false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
